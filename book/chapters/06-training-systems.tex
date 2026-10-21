@@ -1,0 +1,143 @@
+\chapter{训练系统}
+\label{chap:training-stability}
+
+\begin{keybox}[损失函数之外，还要让训练跑得动]
+损失函数决定优化什么；训练系统决定这件事在给定硬件上能否执行。这一章从规模配比出发，依次看优化器怎样更新矩阵、数值为什么会失稳、精度与显存怎样分配，最后把计算拆到多张卡上。每一处选择都对应一种具体资源：算力、显存、带宽或跨卡通信。
+\end{keybox}
+
+\section{训练规模与 Scaling Law}
+\label{sec:training-scaling}
+
+损失函数确定了要优化什么，却没有告诉我们在固定计算预算下该用多大的模型、看多少数据。Scaling law 用不同规模的训练实验拟合损失与规模之间的经验关系。令 \(N\) 为稠密模型的参数量，\(D\) 为训练时处理的 token 总数，在给定模型结构和数据范围内，一种常用的近似写法是
+\begin{equation}
+ L(N,D)\approx L_\infty+\frac{A}{N^\alpha}+\frac{B}{D^\beta},\qquad A,B,\alpha,\beta>0.
+\end{equation}
+这里 \(L_\infty\) 是继续增加参数和数据仍难以消除的损失；后两项分别表示模型容量和训练数据不足带来的损失。增加 \(N\) 或 \(D\) 都有收益，但随着规模增长，单独增加其中一项的边际收益会下降。Kaplan 等用语言模型实验展示了损失随参数、数据和计算规模变化的近似幂律趋势；Chinchilla 后来针对固定计算预算重新比较了模型与数据的配比~\cite{kaplan2020scaling,hoffmann2022chinchilla}。
+
+对稠密 Transformer 的预训练，浮点运算次数（floating-point operations，FLOPs）常用 \(C\approx6ND\) 作一阶估计，其中常数会随结构、序列长度和实现而改变。固定 \(C\) 时，增大 \(N\) 就要减少 \(D\)；将 \(D\approx C/(6N)\) 代入上式，可以看到大模型缓解容量不足，却可能因训练 token 太少而没有充分学好。Chinchilla 的结论是：若只比较相同训练计算量下的验证损失，参数量和训练 token 数应一起增长；在其研究设置中，计算最优点大约对应每个参数训练 20 个 token。这是特定实验范围内的经验配比。
+
+实际选择还取决于训练以外的成本。若模型将被反复调用，可以花更多训练 token 换取较小的参数量，降低长期推理时的权重存储和读取开销；数据质量、重复数据、长序列注意力开销以及 MoE 每个 token 只激活部分参数，也会改变上述拟合关系。Scaling law 用来比较规模方案；具体系统仍需单独测量。\(N\) 决定后文显存账本中的常驻状态，\(D\) 与 \(C\) 影响训练时长，设备容量和卡间通信又限制这些方案能否执行。
+
+\Needspace{8\baselineskip}
+\section{自适应步长与矩阵更新几何}
+
+\subsection{逐元素的尺度归一化}
+
+相同的损失函数还可以通过不同的更新规则优化。若不同参数的梯度尺度相差很大，统一步长可能同时造成某些坐标更新过猛、另一些坐标更新不足。带解耦权重衰减的自适应矩估计（Adaptive Moment Estimation with decoupled Weight Decay，AdamW）针对这一问题调整各坐标的步长。设第 \(t\) 步的参数梯度为 \(g_t\)。AdamW 对参数 \(\theta\) 维护梯度的一阶矩和二阶矩估计，
+\begin{align}
+ m_t&=\beta_1m_{t-1}+(1-\beta_1)g_t,\\
+ v_t&=\beta_2v_{t-1}+(1-\beta_2)g_t^2,
+\end{align}
+再用它们构造更新量：
+\begin{equation}
+ \theta_{t+1}=(1-\eta\lambda)\theta_t
+ -\eta\frac{\widehat m_t}{\sqrt{\widehat v_t}+\varepsilon}.
+\end{equation}
+这里 \(\widehat m_t,\widehat v_t\) 是偏差修正后的矩估计，\(\lambda\) 是解耦的权重衰减系数。这个更新的关键在于 \(m_t/\sqrt{v_t}\)：分子是梯度的滑动平均，分母是该坐标上梯度量级的滑动平均，二者相除使每个参数坐标得到步长近似为 \(\eta\) 的更新，与该坐标历史梯度的大小无关。
+
+这个性质决定了 AdamW 的适用范围。对形状不规则的参数张量——embedding、bias、归一化层的缩放因子——不同坐标的梯度量级天然相差很多，逐元素归一化让它们都能得到有效的更新。代价是更新量与梯度矩阵的奇异值结构无关：一个 \(d_1\times d_2\) 的权重矩阵在 AdamW 眼里只是 \(d_1d_2\) 个互不相关的标量，梯度的方向信息在逐元素除法中丢失了。
+
+\subsection{矩阵更新的正交化}
+
+Muon（MomentUm Orthogonalized by Newton--Schulz）从这一点出发，专门处理二维权重矩阵。它同样先积累梯度动量，
+\begin{equation}
+ M_t=\mu M_{t-1}+G_t,
+\end{equation}
+其中 \(G_t\) 是当前步该矩阵的梯度。接下来的一步是它与 AdamW 的分岔：Muon 近似把更新矩阵非零奇异方向上的奇异值拉向 1，使原本大小不同的方向获得接近的更新尺度。
+
+设 \(M_t=U\Sigma V^\mathsf T\) 是 SVD，\(U_r,V_r\) 分别由正奇异值对应的左右奇异向量组成。普通梯度下降沿 \(M_t\) 方向走，步长会被最大奇异值 \(\sigma_{\max}\) 支配——奇异值大的方向走得快，奇异值小的方向走得慢，而奇异值的大小来自历史梯度累积，反映的是该方向被激活的频率，与它对当前目标的贡献不成比例。理想的正交化方向为
+\begin{equation}
+ O_t=U_r V_r^\mathsf T,
+\end{equation}
+它在非零奇异方向上取奇异值 1，零奇异方向仍为零。只要 \(M_t\neq0\)，就有 \(\|O_t\|_2=1\)；在未做后述尺度标定时，参数矩阵的谱范数每步至多变化 \(\eta\)，梯度特别大的方向因此不再支配整个矩阵的更新幅度。
+
+直接对每个矩阵做 SVD 的代价太高。Muon 使用 Newton--Schulz 迭代来近似这个正交化方向。以一种便于理解的迭代式为例，
+\begin{equation}
+ X_{k+1}=\tfrac12 X_k\left(3I-X_k^\mathsf TX_k\right),
+\end{equation}
+它可以由标量映射 \(x\mapsto\frac12x(3-x^2)\) 理解：\(x=1\) 是不动点，正的非零奇异值在适当初始范围内趋向 1，而零值保持为零。迭代从 \(X_0=M_t/\|M_t\|_F\) 出发（\(M_t=0\) 时不需正交化）；收敛速度取决于初始奇异值大小，固定少量迭代只是近似，不能保证所有非零奇异值都已接近 1。整个过程只用到矩阵乘法，不需要真的求 SVD，因此在图形处理器（Graphics Processing Unit，GPU）上高效。
+
+最后一步是尺度标定。正交化后的 \(O_t\) 的范数与原始梯度无关，直接用它更新会让学习率与梯度大小彻底脱钩，训练后期梯度变小时步长不衰减。Muon 因此把 \(O_t\) 乘上一个 rescale 因子，通常取 \(\sqrt{\max(1,d_1/d_2)}\) 一类由矩阵形状决定的常数，使更新量的均方根（root mean square）与 AdamW 在同一量级；学习率 schedule 因而可以沿用原来的设定。
+
+\subsection{两者的分工}
+
+Muon 改变的是矩阵参数沿目标梯度移动的几何，交叉熵目标本身保持不变。它的收益在大矩阵上最明显，因为这些矩阵的奇异值分布往往很不均匀；对向量参数通常不采用这一矩阵正交化规则，其更新仍交给逐坐标优化器。
+
+实际训练因此把参数按形状和语义分组：embedding 和 logits head 受词频、稀疏梯度和权重共享影响，通常保留 AdamW；RMSNorm 的缩放因子是向量，也走 AdamW；attention 的 \(W_Q,W_K,W_V,W_O\) 和 FFN 的投影矩阵是二维矩阵，交给 Muon。这类分组决定了训练时的 optimizer rule 集合，也决定了 checkpoint 中要保存几套优化器状态。Kimi K2 使用带有稳定化设计的 MuonClip 训练大规模 MoE~\cite{kimik2}；Kimi K3 进一步把正交化按 head 切分（Per-Head Muon），使大梯度 head 不压制其他 head 的更新~\cite{kimmik3}。
+
+\section{Pre-Norm、QK-Norm、残差和 outlier}
+\label{sec:qk-norm}
+
+深层网络会反复放大某些通道；若注意力分数或激活超出稳定范围，后面的 softmax 和低精度运算都可能失效。Pre-Norm residual path 让梯度可以沿 \(h_{l+1}=h_l+\mathcal F_l(\operatorname{Norm}(h_l))\) 直接跨层传播；QK-Norm 在计算 \(QK^\mathsf T\) 前分别归一化 query 和 key，限制 attention logit 的尺度，防止 softmax 过早饱和。残差分支若放大，会使深层 hidden 和梯度出现 outlier；因此现代模型还会使用 residual scaling、SwiGLU clamping、gradient clipping 或对输出 gate 加有界参数化。
+
+这些操作针对不同位置：gradient clipping 约束参数梯度，QK-Norm 约束 attention logit，activation clipping 约束 hidden/FFN 输出，residual scaling 约束跨层累积。诊断时先看哪一个张量先越过数值范围，再选择对应的限制。
+
+\section{混合精度与量化感知训练}
+
+大模型训练需要存储权重、激活和优化器状态，降低每个数值的位数可以节省显存和带宽，但同时缩小数值精度或动态范围。BF16（Brain Floating Point 16，16 位脑浮点格式）保留较大的指数范围，适合训练大模型；8 位浮点（Floating Point 8，FP8）和 4 位浮点（Floating Point 4，FP4）进一步减少矩阵乘的存储与带宽，但 scale、outlier 和累积精度必须单独处理。常见做法是低精度保存 activation/weight，使用 32 位浮点（Floating Point 32，FP32）或 BF16 accumulator，保留 FP32 master weight 更新；16 位浮点（Floating Point 16，FP16）若指数范围不足，还需要 dynamic loss scaling，把 loss 乘大后反向传播，再在更新前除回 scale，以避免小梯度下溢。
+
+FP8 与 FP4 等低比特格式会把连续权重舍入到有限的数值格点。训练后量化在已有模型上使用校准数据选择缩放尺度，目标是在减少存储的同时控制舍入误差。可以保护对激活最敏感的权重通道，按近似二阶损失分配误差，或把激活中的极端尺度转移到权重中~\cite{frantar2023awq,frantar2023gptq,xiao2023smoothquant}；也可以冻结量化后的基础权重，仅训练额外的低秩参数来适配任务~\cite{dettmers2023qlora}。
+
+量化感知训练（Quantization-Aware Training，QAT）把部署时的舍入误差提前放进训练：前向执行模拟量化，反向用近似梯度穿过不可微的取整操作。模型因此有机会调整权重以适应低精度。QAT 对注意力分数和专家路由尤其重要，因为微小数值误差也可能改变 softmax 权重或被选中的专家。后面的架构案例会说明它在专家权重与历史选择器上的作用。
+
+\section{一次训练更新的显存账本}
+
+精度格式最终要落到每张卡保存的具体张量上。以一张卡完整保存一个约 70 亿参数的模型、用 AdamW 做混合精度训练为例，假设计算用的权重和梯度各为 BF16（每元素 2 字节），另存一份 FP32 主权重（4 字节），AdamW 的一阶矩和二阶矩各为 FP32（共 8 字节）。先不计激活、临时空间或分片，四项常驻状态合计每参数 \(2+2+4+8=16\) 字节。以下容量用吉字节（gibibyte，GiB；\(1\,\mathrm{GiB}=2^{30}\) 字节）表示：
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries}p{37mm} p{30mm} p{26mm} X}
+\toprule
+保存的张量 & 每参数字节数 & 70 亿参数约占 & 用途\\
+\midrule
+BF16 权重 & 2 & 13.0 GiB & 前向与反向计算\\
+BF16 梯度 & 2 & 13.0 GiB & 汇总本次更新的梯度\\
+FP32 主权重 & 4 & 26.1 GiB & 以较高精度执行参数更新\\
+AdamW 的两份矩估计 & 4+4 & 52.2 GiB & 保存梯度的一阶矩与二阶矩\\
+\midrule
+合计 & 16 & 104.3 GiB & 尚未计入激活和临时空间\\
+\bottomrule
+\end{tabularx}
+\caption{一个未做分片或卸载的 AdamW 混合精度训练例子。实际实现可能改变梯度精度、主权重副本或优化器状态的保存方式。}
+\label{tab:training-memory-budget}
+\end{table}
+
+激活是另一份显存：反向传播需要前向各层的中间结果，大小随一次送入的样本数和序列长度增加。假设这个模型有 32 层、hidden width 为 4096，一个 microbatch 含 1 条 4096-token 序列；若采用激活重计算，只在每层入口保留一份 BF16 hidden vector，这些层入口向量约占 \(32\times1\times4096\times4096\times2\) 字节，即 1.0 GiB。反向经过某层时再运行该层的部分前向计算，重建所需的 Q/K/V、FFN 等内部激活；当前层的临时张量和计算工作区仍要占空间。即使只把这 1.0 GiB 加到表 \ref{tab:training-memory-budget}，也已有约 105.3 GiB，超过单张 80 GiB 卡的容量。
+
+这个例子说明两种节省方式针对不同部分：激活重计算用额外计算减少随 microbatch 和序列长度增长的激活存储；把一次大 batch 拆成多个 microbatch 并累积梯度，可降低每次前向需要保存的激活，但权重、梯度和 AdamW 状态仍需保留。要显著减少表中的常驻状态，还需采用优化器状态、梯度或参数分片，或把部分状态卸载到其他存储；下一节将介绍分片数据并行。
+
+\section{多卡训练}
+\label{sec:distributed-training}
+
+模型大到单卡放不下，或者一张卡处理数据太慢时，就要让多张加速卡共同完成训练。首先要问的是\textbf{拆分的对象是什么}：不同样本、同一层的权重、不同层、MoE 的专家，还是同一个长序列的位置。拆分以后，各卡算出的局部结果必须在适当时刻合并；因此并行带来的计算与显存收益，总要和卡间通信及等待时间一起看。
+
+\textbf{数据并行（Data Parallelism，DP）}给每张卡放一份相同模型，把一个全局 batch 的样本分给不同卡。各卡独立前向、反向，再通过 all-reduce 汇总梯度，使模型参数保持一致。例如 8 张卡各处理 8 个样本，汇总后相当于一个大小为 64 的全局 batch。它能增加数据吞吐，但每卡仍须容纳整份模型及其优化器状态。零冗余优化器（Zero Redundancy Optimizer，ZeRO）一类\textbf{分片数据并行}进一步把优化器状态、梯度或参数分散到不同卡，需要时再收集对应权重，因而用额外通信换取单卡显存~\cite{rajbhandari2020zero}。
+
+\textbf{张量并行（Tensor Parallelism，TP）}把同一层的大矩阵沿通道切开，例如把注意力 heads 或 FFN 的中间宽度分给多张卡。每卡只保存并计算矩阵的一部分，随后通过 all-reduce、all-gather 等集体通信拼合当前层所需的结果；由于几乎每层都要通信，它尤其依赖卡间的高速连接。\textbf{流水线并行（Pipeline Parallelism，PP）}改为把前几层、中间几层和后几层分别放在不同卡上，层间传递激活及反向梯度；把 batch 切成多个 microbatch 可让不同阶段同时工作，但填充和排空流水线时仍会有空闲时间~\cite{shoeybi2019megatron}。这两种都是模型并行：TP 切一层内部，PP 切层与层之间。
+
+MoE 还引入\textbf{专家并行（Expert Parallelism，EP）}：不同设备保存不同专家，路由器决定 token 去往哪些设备，执行专家 FFN 后再把结果送回原位置。若大量 token 挤向同一专家，该设备会拖慢其余设备；因此路由负载平衡同时是统计训练问题和通信调度问题。超长序列还可按位置切分做\textbf{上下文并行}，各卡只保留一段序列的激活，但注意力必须取得其他分段所需的 K/V，计算收益取决于跨卡交换的成本。
+
+实际大模型会组合这些轴：数据并行分样本，TP/PP 分共享主干，EP 分专家，上下文并行分长序列。训练时还要同步梯度与优化器状态；推理时没有梯度，但若模型或 KV cache 仍分布在多卡上，层间结果、专家 token 和历史状态仍须按对应划分传递。这种模型内部的多卡划分，与下一章把 prefill 和 decode 放到不同资源池的阶段划分是两件事，可以同时使用。
+
+\clearpage
+\section{训练机制汇总}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries}p{30mm} p{35mm} X X}
+\toprule
+机制 & 作用对象 & 解决的问题 & 额外代价\\
+\midrule
+Pre-Norm\newline RMSNorm & 残差输入、hidden 通道 & 稳住层间尺度与梯度 & 额外归一化计算\\
+QK-Norm\newline 注意力分数限幅 & query、key、注意力分数 & 防止 softmax 饱和 & 额外 norm/clip，改变分数尺度\\
+梯度裁剪 & 参数梯度 & 阻断单步爆炸更新 & 可能截断有效大梯度\\
+AdamW & 参数及优化器状态 & 调整各坐标步长 & 优化器状态占显存\\
+Muon & 矩阵动量 & 调整矩阵更新方向和尺度 & 额外矩阵乘与迭代\\
+低精度 / QAT & 权重、激活与路由分数 & 省显存带宽，适应量化 & scale 和累积精度管理\\
+DP / ZeRO & 样本和训练状态 & 增吞吐，减单卡状态 & 梯度同步与状态收集\\
+TP / PP / EP & 矩阵、层段或专家 & 分布大模型的参数与计算 & 卡间通信与负载等待\\
+\bottomrule
+\end{tabularx}
+\caption{训练系统中各类机制的作用点与代价。}
+\label{tab:training-stability-mechanisms}
+\end{table}

@@ -1,0 +1,372 @@
+\chapter{智能体系统}
+\label{chap:agents}
+
+\begin{keybox}[模型、harness 与智能体]
+大模型只做一件事：读入一段上下文，续写 token。它不能读文件、不能执行命令，也不记得上一次调用。harness 是包在模型外面的程序：它拼装上下文、调用模型、解析模型写出的工具调用并执行，把结果写回上下文，再调用一次模型。智能体就是模型加 harness；这个循环一直运行，直到模型不再发出工具调用。
+\end{keybox}
+
+智能体系统这几年的变化，主线是决策权的转移。早期模型上下文短、工具调用不可靠，许多决定只能由 harness 中的程序预先写定：先做哪一步、给模型看哪些文档、带上哪些指令。模型能力增强以后，这些决定逐步交还给模型（表 \ref{tab:agent-decision-shift}）。harness 因此变薄，但保留模型替代不了的职责：真正执行动作，检查权限，控制上下文预算，把状态保存到会话之外。
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries}p{24mm} X X}
+\toprule
+环节 & 早期：由 harness 中的程序决定 & 现在：由模型决定\\
+\midrule
+流程 & workflow 写死步骤 & 模型决定下一步与何时停止\\
+检索 & 回答前由程序检索一次 & 模型在循环中决定何时搜索、搜什么\\
+用哪些知识 & 全部指令预先放进 prompt & skill 与 memory 只常驻索引，正文由模型按需读取\\
+规划 & 专门的规划模块 & 模型自己写待办列表并随进展更新\\
+多智能体编排 & harness 写死的多智能体流水线 & 模型按任务现写编排脚本\\
+\bottomrule
+\end{tabularx}
+\caption{智能体系统中决策权从 harness 向模型的转移。}
+\label{tab:agent-decision-shift}
+\end{table}
+
+图 \ref{fig:agent-overview} 画出了三者的关系：harness 包在 LLM 外面，维护上下文、执行工具；LLM 每一轮读入整个上下文，决定下一步做什么。
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\small,
+  lab/.style={font=\scriptsize,text=Ink,align=center},
+  num/.style={circle,fill=Navy,text=white,font=\tiny\bfseries,inner sep=0pt,minimum size=3.6mm},
+  bigflow/.style={-{Latex[length=2.6mm]},line width=1.1pt,color=Navy}]
+  \fill[Amber!60,draw=Orange,line width=0.9pt,rounded corners=6mm] (0,0) rectangle (10.2,5.8);
+  \node[anchor=north west,font=\large\bfseries,text=Orange] at (0.25,5.65) {harness};
+  \fill[Teal!35] (0.9,1.0) rectangle (2.7,1.75);
+  \node[font=\tiny,text=Navy] at (1.8,1.375) {系统提示、工具};
+  \foreach \k in {0,1,2,3}{
+    \pgfmathsetmacro{\yb}{1.75+0.55*\k}
+    \fill[Navy!70] (0.9,\yb) rectangle (2.7,\yb+0.09);
+    \fill[Orange!55] (0.9,\yb+0.09) rectangle (2.7,\yb+0.55);
+  }
+  \draw[Slate,dashed] (0.9,3.95) rectangle (2.7,4.5);
+  \node[font=\tiny,text=Slate] at (1.8,4.225) {下一轮追加};
+  \draw[Navy,line width=0.6pt] (0.9,1.0) rectangle (2.7,4.5);
+  \node[lab,anchor=north] at (1.8,0.9) {\textbf{上下文}（只追加）};
+  \node[lab,anchor=west,text=Slate] at (2.8,3.0) {细条：模型输出\\厚块：工具结果};
+  \node[circle,draw=Teal,line width=1pt,fill=Sky,minimum size=24mm,align=center] (llm) at (7.3,3.65) {\large\bfseries LLM\\[1mm]\scriptsize 读入上下文\\\scriptsize 续写下一步};
+  \node[draw=Orange,fill=white,rounded corners=2pt,line width=0.8pt,minimum width=26mm,minimum height=9mm,align=center,font=\small] (exec) at (7.3,0.95) {执行工具调用};
+  \draw[bigflow] (1.8,4.6) .. controls (2.6,5.5) and (5.0,5.45) .. (llm.north west);
+  \node[lab,anchor=west] (l1) at (3.55,5.45) {每轮读入整个上下文};
+  \node[num,anchor=east] at ([xshift=-1pt]l1.west) {1};
+  \draw[bigflow] (llm.south) -- (exec.north);
+  \node[lab,anchor=west] (l2) at (7.75,1.95) {写出工具调用};
+  \node[num,anchor=east] at ([xshift=-1pt]l2.west) {2};
+  \draw[bigflow] (exec.west) .. controls (4.8,0.95) and (3.6,1.7) .. (2.75,2.2);
+  \node[lab,anchor=west] (l3) at (3.7,0.55) {结果追加到末尾};
+  \node[num,anchor=east] at ([xshift=-1pt]l3.west) {3};
+  \node[draw=Ink,fill=Ink,rounded corners=1.5pt,minimum width=13mm,minimum height=9mm] (term) at (13.05,0.95) {};
+  \node[font=\ttfamily\small,text=white] at (term) {\$ \_};
+  \draw[Slate,fill=white] (14.0,0.55) -- (14.0,1.35) -- (14.5,1.35) -- (14.65,1.2) -- (14.65,0.55) -- cycle;
+  \draw[Slate,fill=white] (14.15,0.45) -- (14.15,1.25) -- (14.65,1.25) -- (14.8,1.1) -- (14.8,0.45) -- cycle;
+  \node[lab,anchor=north] at (13.8,0.3) {环境：终端、文件、测试};
+  \draw[bigflow,{Latex[length=2.6mm]}-{Latex[length=2.6mm]},color=Orange] (exec.east) -- (term.west);
+  \node[lab,anchor=south] at (11.35,1.0) {bash、读写文件};
+  \draw[bigflow,color=Teal] (llm.east) -- (12.6,3.65) node[lab,anchor=west,font=\small]{回答用户};
+  \node[lab,anchor=south] at (11.4,3.7) {不再调用工具};
+\end{tikzpicture}
+\caption{智能体 = LLM + harness。harness 维护上下文、执行工具，LLM 只负责每一轮读入上下文并决定下一步。读入、调用、追加三步不断重复，上下文随之增长，直到 LLM 不再调用工具。}
+\label{fig:agent-overview}
+\end{figure}
+
+\section{从对话到智能体：同一个模型，多了一个循环}
+\label{sec:agent-loop}
+
+按流程由谁控制，大模型应用可以排成一条谱系。单次对话里，用户提问，模型回答一次。workflow 由程序写好步骤，例如“检索相关文档 → 让模型总结 → 按模板改写”，模型在每一步里填空，步骤的数目和顺序在写程序时就已确定。智能体只给模型一个循环和一组工具，由模型决定下一步做什么、何时停止。调试这类任务事先列不出步骤，下一步做什么取决于上一步看到了什么，只能交给模型在循环中决定。
+
+\begin{figure}[ht]
+\centering
+\begin{tcolorbox}[enhanced,colback=Mist,colframe=Slate,boxrule=0.5pt,arc=2mm,width=0.9\textwidth,left=4mm]
+\small
+\begin{verbatim}
+context = [system_prompt, tool_specs, project_notes, user_task]
+while True:
+    reply = model(context)          # 读入整个上下文，续写一段输出
+    context.append(reply)
+    calls = parse_tool_calls(reply)
+    if not calls:                   # 没有工具调用：任务结束
+        return reply
+    for call in calls:
+        if permitted(call):
+            result = execute(call)  # 运行命令、读写文件……
+        else:
+            result = "permission denied"
+        context.append(truncate(result))
+    if too_long(context):
+        context = compact(context)  # 用摘要替换较早的历史
+\end{verbatim}
+\end{tcolorbox}
+\caption{智能体主循环。除 \texttt{model} 外，其余函数都由 harness 实现。}
+\label{fig:agent-loop}
+\end{figure}
+
+图 \ref{fig:agent-loop} 的循环里只有一处调用模型。模型每次看到的都是完整上下文：系统提示、工具说明、任务，以及此前每一轮的输出和工具结果。模型自身没有跨调用的状态，它“记得”上一步做过什么，只因为 harness 把上一步原样写回了上下文。退出条件也由模型给出：判断任务完成时，它只写一段给用户的文字，不再调用工具。
+
+以修复一个失败的单元测试为例。初始上下文包括系统提示、工具定义、项目说明文件、skill 索引和用户的一句话“test\_leap\_day 失败了，修好它”，合计约 15k token。表 \ref{tab:agent-trace} 是一次典型的运行。
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\centering\arraybackslash}p{9mm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{22mm} >{\raggedright\arraybackslash}X >{\raggedleft\arraybackslash}p{15mm}}
+\toprule
+轮次 & 模型输出 & harness 执行 & 写回上下文 & 本轮输入\\
+\midrule
+1 & bash：运行测试 & 运行 pytest & 报错栈：闰日 2024-02-29 解析失败（约 1.2k） & 15.0k\\
+2 & bash：grep 函数名 \texttt{parse\_date} & 搜索代码 & 匹配位置：\texttt{dates.py} 第 42 行（约 0.1k） & 16.3k\\
+3 & read：\texttt{dates.py} & 读取文件 & 带行号的源文件（约 3k） & 16.4k\\
+4 & edit：把写死的“二月 28 天”改为按闰年计算 & 修改文件 & “已修改 1 处”（约 0.05k） & 19.5k\\
+5 & bash：再次运行测试 & 运行 pytest & 全部通过（约 0.3k） & 19.8k\\
+6 & 文字：说明原因与改动，不调用工具 & 退出循环 & — & 20.2k\\
+\bottomrule
+\end{tabularx}
+\caption{修复一个失败单元测试的逐轮记录。除第 4 轮的编辑（约 0.3k）和第 6 轮的说明（约 0.2k）外，模型每轮输出约 50 token。“本轮输入”是该轮调用模型时的上下文长度。}
+\label{tab:agent-trace}
+\end{table}
+
+六轮中模型的输出合计只有约 0.7k token，六次调用读入的上下文却合计约 107k token，因为每一轮都要把整个历史重新送入模型。上下文主要由工具结果撑大：报错栈和源文件都远比模型写出的命令长。
+
+\section{模型与 harness 的分工}
+\label{sec:agent-division}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries}p{22mm} X}
+\toprule
+承担方 & 职责\\
+\midrule
+模型 & 选择下一步动作；写代码和命令；判断任务是否完成；决定读取哪个 skill、哪条记忆\\
+harness & 拼装上下文（系统提示、工具定义、项目说明、skill 与 memory 索引）；解析并执行工具调用；权限检查与沙箱；截断与压缩上下文；跨会话持久化；派生子智能体\\
+\bottomrule
+\end{tabularx}
+\caption{模型与 harness 的职责划分。}
+\label{tab:agent-roles}
+\end{table}
+
+\subsection{工具调用与工具集}
+
+对模型来说，“调用工具”仍是逐 token 续写。chat template 把整段对话渲染成一条 token 序列（图 \ref{fig:tool-template}）：工具定义作为普通文本写在 system 段；模型需要工具时，续写出一对特殊 token 包住的调用。harness 在生成中看到结束标记就停止解码，解析并执行这段调用，把结果包成 tool 角色的消息接在序列末尾，再让模型从新的 assistant 段开始续写。
+
+\begin{figure}[ht]
+\centering
+\begin{tcolorbox}[enhanced,colback=Mist,colframe=Slate,boxrule=0.5pt,arc=2mm,width=0.9\textwidth,left=4mm]
+\footnotesize
+\begin{verbatim}
+<|im_start|>system
+可用工具：bash(command)<|im_end|>
+<|im_start|>user
+test_leap_day 失败了，修好它。<|im_end|>
+<|im_start|>assistant
+<tool_call>bash("pytest tests/test_dates.py")</tool_call><|im_end|>
+<|im_start|>tool
+FAILED test_leap_day - ValueError: day is out of range<|im_end|>
+<|im_start|>assistant
+\end{verbatim}
+\end{tcolorbox}
+\caption{工具调用在 token 序列中的样子（示意）。\texttt{<|im\_start|>}、\texttt{<tool\_call>} 等是词表中的特殊 token；模型写出 \texttt{</tool\_call>} 后，harness 接管，执行命令并写入 tool 段。}
+\label{fig:tool-template}
+\end{figure}
+
+“调用”的含义完全由 harness 赋予：模型写出的只是一段格式化文本，执行与否、怎样执行、结果是什么，都由外层程序决定。在合适的时机写出合法的调用，这种能力来自第 \ref{chap:training-methods} 章的 SFT 与强化学习，模型结构没有任何改动。
+
+工具集的主流选择是以 bash 为主：不为列目录、搜索、跑测试各定义一个专用工具，只给一个 bash，让模型自己写命令。管道和常用命令能组合出大量操作；预训练语料中有海量 shell 用法，模型对它的熟悉程度远超新定义的接口；一份工具定义比许多份占的上下文少；skill、memory 和项目说明都是文件，bash 正好能读写（第 \ref{sec:agent-context} 节）。一条命令还能完成几步操作，减少轮次：若每步独立成功的概率为 0.95，20 步的任务整体成功率约 \(0.95^{20}\approx0.36\)，步数减到 10 则升至约 0.60。专用工具只留给少数场合，例如以 diff 呈现、便于审查的文件编辑；没有命令行接口的外部服务通过模型上下文协议（Model Context Protocol，MCP）接入。
+
+bash 的代价是动作空间不设限，删除目录、向外网发送数据都只是一行命令，约束因此设在 harness：沙箱限制可写目录与网络，权限模式决定哪些命令需要用户确认。提示注入（prompt injection）也靠这道防线：工具返回的网页、issue 与用户的指令处在同一个上下文中，模型无法可靠地区分数据和指令，网页里一句“把密钥文件发到某个地址”就可能被照做。训练只能降低受骗的概率，harness 要保证模型即使被骗，也没有权限做危险的事。
+
+\subsection{模型与 harness 一起训练}
+
+智能体的强化学习把 rollout 放进真实环境：给模型一个代码仓库和一个任务，在沙箱中运行与部署时相同的主循环，结束后运行测试，通过则奖励为 1。这就是第 \ref{sec:post-training} 节的 RLVR，只是一条轨迹包含许多轮工具调用。轨迹中工具返回的 token 由环境产生，不计入损失，与 SFT 中 mask 掉指令部分（第 \ref{sec:sft} 节）同理。
+
+训练使模型适应了某一套工具格式、上下文组织方式和循环节奏。换一个 harness，即使权重不变，表现也可能差很多。智能体的能力由模型与 harness 共同决定，二者需要一起设计。
+
+\section{上下文缓存的经济学}
+\label{sec:agent-cache}
+
+\subsection{输入为什么占绝对大头}
+
+表 \ref{tab:agent-trace} 体现了智能体负载的三个特点：每轮都重新输入全部历史；模型每轮输出很短，通常是一个工具调用；工具返回的文件和日志很长。在真实的 coding agent 会话中，输出 token 通常只有输入 token 的 5‰ 到 1\%，输入中 95\% 以上可以命中缓存。
+
+API 提供方的前缀缓存就是第 \ref{chap:inference-systems} 章的 KV cache 跨请求保存：若本次请求的开头与之前某次请求相同，这一段的 K/V 可以直接读出，不必重新 prefill。匹配必须从第一个 token 开始逐个相同。在因果注意力中，位置 \(i\) 在较高层的 key 和 value 经过下面各层的注意力，依赖位置 \(1,\ldots,i\) 的全部 token；前缀中任何一处改动，都会使其后所有位置的缓存失效。
+
+智能体循环天然适合前缀缓存：第 \(i\) 轮的输入正是第 \(i-1\) 轮的输入，加上第 \(i-1\) 轮的输出和工具结果。只有末尾新增的部分需要 prefill。
+
+\subsection{一次会话的成本账}
+
+真实的修复会话往往比表 \ref{tab:agent-trace} 长。把它放大到 \(n=40\) 轮来估算：初始上下文 \(C_0=15\)k token，每轮追加 \(\Delta=2.5\)k token，其中模型输出（含思考与工具调用）约 0.4k，其余是工具结果。第 \(i\) 轮的输入长度为 \(C_0+(i-1)\Delta\)，累计输入
+\begin{equation}
+ N_{\mathrm{in}}=\sum_{i=1}^{n}\bigl[C_0+(i-1)\Delta\bigr]=nC_0+\frac{n(n-1)}{2}\Delta
+ =0.60\text{M}+1.95\text{M}=2.55\text{M}.
+ \label{eq:agent-input-total}
+\end{equation}
+输出合计 \(40\times0.4\text{k}=16\text{k}\)，约为输入的 0.6\%。第 \(i\ge2\) 轮输入的前 \(C_0+(i-2)\Delta\) 个 token 与上一轮相同，命中缓存；末尾 2.5k 是新内容，需要计算并写入缓存。累计起来，缓存读取约 2.44M token，缓存写入约 0.11M（含第一轮的 15k），命中率约 96\%。
+
+按 Claude Opus 5.5 的 API 价格（2026 年 10 月）计算：普通输入每百万 token 4 美元，缓存写入 5 美元（普通输入的 1.25 倍，缓存保留 5 分钟），缓存读取 0.20 美元（普通输入的 5\%），输出 20 美元~\cite{anthropicpricing}。
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries}X r r r r}
+\toprule
+token 类别 & 数量 & 单价（美元 / 百万 token） & 无缓存 & 有缓存\\
+\midrule
+与上一轮相同的前缀 & 2.44M & 4 → 0.20（缓存读取） & \$9.75 & \$0.49\\
+新增输入 & 0.11M & 4 → 5（缓存写入） & \$0.45 & \$0.56\\
+输出 & 0.016M & 20 & \$0.32 & \$0.32\\
+\midrule
+合计 & & & \$10.52 & \$1.37\\
+\bottomrule
+\end{tabularx}
+\caption{40 轮修复会话按 Claude Opus 5.5 价格的成本估算。单价一栏中箭头左边是无缓存时的价格，右边是有缓存时的价格。}
+\label{tab:agent-cost}
+\end{table}
+
+有缓存时一次会话约 1.4 美元，约为无缓存时（10.5 美元）的 1/8。缓存读取只要普通输入价的 5\%，2.44M token 的历史只花 0.49 美元；每轮新增的内容要按 1.25 倍价格写入缓存，反而成了最大的一项，约占 41\%；输出约占 1/4。输入一侧的读取与写入合计约占 3/4，成本的大头仍在输入。
+
+式 \eqref{eq:agent-input-total} 的第二项随 \(n^2\) 增长：轮数从 40 增加到 80，累计输入从 2.55M 增至约 9.1M。每一轮的成本与当时的上下文长度成正比，越往后的一轮越贵。把 100k 的历史压缩成 10k 的摘要，此后每一轮都省下约 90k 的读取，这是压缩上下文的根本原因。
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\small]
+  \foreach \i in {1,...,40}{
+    \pgfmathsetmacro{\xx}{0.3*(\i-1)}
+    \pgfmathsetmacro{\hc}{ifthenelse(\i==1,0,0.045*(15+2.5*(\i-2)))}
+    \pgfmathsetmacro{\hn}{ifthenelse(\i==1,0.045*15,0.045*2.5)}
+    \fill[Teal!55] (\xx,0) rectangle ++(0.22,\hc);
+    \fill[Orange] (\xx,\hc) rectangle ++(0.22,\hn);
+    \fill[Navy] (\xx,{\hc+\hn}) rectangle ++(0.22,0.018);
+  }
+  \draw[Slate] (-0.1,0) -- (11.95,0);
+  \draw[Slate] (-0.1,0) -- (-0.1,5.4);
+  \foreach \v in {0,25,50,75,100}{
+    \draw[Slate] (-0.18,{0.045*\v}) -- (-0.1,{0.045*\v});
+    \node[anchor=east,font=\scriptsize] at (-0.2,{0.045*\v}) {\v k};
+  }
+  \foreach \i in {1,10,20,30,40}{
+    \node[anchor=north,font=\scriptsize] at ({0.3*(\i-1)+0.11},-0.05) {\i};
+  }
+  \node[anchor=north] at (5.9,-0.45) {轮次};
+  \node[rotate=90,anchor=south] at (-1.0,2.6) {本轮输入 token 数};
+  \fill[Teal!55] (0.4,4.7) rectangle ++(0.3,0.22);
+  \node[anchor=west,font=\scriptsize] at (0.75,4.81) {命中缓存的前缀};
+  \fill[Orange] (0.4,4.3) rectangle ++(0.3,0.22);
+  \node[anchor=west,font=\scriptsize] at (0.75,4.41) {新增输入（上一轮输出与工具结果）};
+  \fill[Navy] (0.4,3.9) rectangle ++(0.3,0.22);
+  \node[anchor=west,font=\scriptsize] at (0.75,4.01) {本轮输出（约 0.4k，图中只是柱顶的细线）};
+\end{tikzpicture}
+\caption{40 轮修复会话中每轮的输入构成。柱高随轮次线性增长，累计面积随轮数平方增长；新增输入与输出在每根柱中只占很薄的一层。}
+\label{fig:agent-context-growth}
+\end{figure}
+
+\subsection{回到推理系统}
+
+从服务端看，智能体负载以 prefill 和缓存读取为主：每轮 decode 只生成几百个 token，之前却要处理或从缓存读出上万到十几万 token 的上下文。这与聊天场景中“长回答的 decode 受带宽限制”的直觉相反（第 \ref{sec:prefill-decode} 节）。缓存读取之所以便宜，是因为它省掉了这一段 prefill 的计算。
+
+两轮之间夹着工具执行，从几秒（grep）到几分钟（编译、跑完整测试）。按第 \ref{sec:kv-budget} 节的示例模型，100k token 上下文的 KV cache 约 30 GiB；让每个等待工具结果的会话都占着 HBM，显存很快耗尽。服务端因此给前缀缓存设置存活时间（time to live，TTL），超时即回收；把暂时不用的 KV 卸载到 CPU 内存或 SSD，需要时再取回；用前缀树让共享系统提示和工具定义的会话共用同一份缓存，即第 \ref{sec:paged-serving} 节的 RadixAttention 与外部 KV pool。
+
+\subsection{harness 的缓存规则}
+
+缓存按前缀匹配，harness 组织上下文时因此遵循几条规则：
+\begin{itemize}
+  \item \textbf{前缀顺序固定。}最稳定的内容放在最前：系统提示、工具定义、项目说明与 skill / memory 索引，然后才是会话历史。
+  \item \textbf{只追加，不改写。}历史写入后不再修改；会话中途不增删工具定义；时间戳之类每次都变的内容不放进前缀。
+  \item \textbf{压缩与切换模型都使缓存失效。}压缩改写了历史，换模型则换了一套 K/V；下一轮相当于从头 prefill 一次。
+  \item \textbf{子智能体从冷缓存起步。}它的上下文是新建的，第一轮无法复用主循环的缓存。
+\end{itemize}
+
+\section{上下文工程}
+\label{sec:agent-context}
+
+上下文工程（context engineering）决定每一轮送进模型的是什么：放多少，放哪些内容，相关内容从哪里找来。它受两个约束。一是成本：上下文越长，每一轮越贵（第 \ref{sec:agent-cache} 节）。二是质量：同一个模型在上下文变长时，从中找出并使用关键信息的能力会下降，这种现象称为 context rot。
+
+\subsection{截断、压缩与待办列表}
+
+控制长度的基础手段有三种。过长的工具输出在写回前截断，例如只保留日志的开头和结尾，并告诉模型完整内容存在哪个文件里。历史过长时压缩，让模型把较早的对话总结成摘要，替换原文。长任务中让模型维护一份待办列表，每完成一步就重写一次，使总目标在几十轮之后仍出现在上下文末尾附近。
+
+\subsection{渐进式披露：skill 与 memory}
+
+渐进式披露（progressive disclosure）是在上下文里常驻一份短索引，正文放在文件里，由模型判断需要时再读。skill 和 memory 都采用这种做法。
+
+skill 是一个目录，其中的 SKILL.md 文件开头写名称和一行描述，后面是详细指令；目录里还可以放参考文档和脚本。它分三层加载：
+\begin{enumerate}
+  \item 名称和描述常驻上下文，每个 skill 约几十 token。
+  \item 模型判断当前任务与某条描述相符时，读入 SKILL.md 正文。
+  \item 正文引用的参考文件按需再读；脚本通过 bash 直接运行，模型只看到运行结果，代码本身不进入上下文。
+\end{enumerate}
+
+memory 用同一结构：一份索引文件在每次会话开始时载入，每条记忆是一个单独的文件，相关时才读取；写入记忆就是写一个文件，并在索引里加一行。按目录分层放置的项目说明文件（AGENTS.md、CLAUDE.md 等）也是同一结构。
+
+模型的记忆分三层：权重中的知识只能靠训练写入；上下文是工作记忆，会话结束即丢失；文件持久，可读可写。跨会话的记忆就是读写文件，不涉及模型内部的任何机制。
+
+渐进式披露的收益有三点。第一是上下文开销：假设有 30 个 skill，每个正文约 3k token，全部预载约 90k，只放索引约 1.5k。第二是缓存友好：索引稳定，放在前缀中；正文按需读取时作为工具结果追加在末尾，不破坏已有缓存。若改由 harness 按任务往系统提示里动态插入指令，每次插入都会改写前缀。第三是决策权在模型：harness 只负责暴露索引，加载什么由模型判断。
+
+代价也来自最后一点：模型可能漏读该读的 skill 或记忆。描述因此要写清楚什么情况下使用，而不只是说明它是什么。记忆还会过时，写入之外还需要更新和删除；过时的记忆比没有记忆更有害，因为模型会把它当作事实。
+
+\subsection{检索：向量检索与 grep}
+\label{sec:agent-search}
+
+智能体常常要在本地的知识库或代码库里找出与任务相关的内容。检索增强生成（Retrieval-Augmented Generation，RAG）和 grep 都是做这件事的手段，区别在于怎样判断“相关”。
+
+RAG 用向量相似度。预先把文档切成几百 token 的块，用编码器把每块变成向量存入索引；查询时把问题也变成向量，取相似度最高的 \(k\) 块放进上下文。grep 则直接在文件上做精确的字符串或正则匹配，配合 glob 按文件名查找、read 读取文件的某一段；代码库的目录结构和文件路径本身就是一份索引。表 \ref{tab:agent-trace} 的第 2、3 轮就是一次这样的搜索。
+
+在 coding agent 中 grep 成为主流，原因有四。代码中的函数名、类名和报错信息适合精确匹配，按语义相似度检索反而容易召回看似相关、实际无关的片段。不需要预先建索引，文件改动后也没有索引过期的问题。不切块，读到的是完整、带行号的代码，一个函数不会被切成两半。最重要的是模型能力的提升：grep 本身只认字面，查询写得好不好全靠模型。较强的模型能从报错信息推测相关的标识符，把几种可能的写法合成一个正则，看到结果后判断方向对不对，再顺着 import 和调用关系追下去；理解“意思”的工作由模型完成，检索工具只需做最简单的字面匹配。
+
+grep 的局限在规模很大的自然语言语料上最明显：同一个意思有许多种说法，模型列举不完所有措辞，向量检索在这里仍然有用。两种手段都可以作为工具放进循环，由模型决定何时调用、用什么查询。
+
+\section{多智能体：用新上下文换取隔离}
+\label{sec:agent-multi}
+
+子智能体就是再开一个主循环：harness 新建一份上下文，放入子任务说明，让它独立运行；结束时只把一段摘要返回主循环，作为一次工具调用的结果。子智能体的系统提示和工具集可以与主循环不同，例如只给只读工具。
+
+收益有两点。一是隔离：搜索代码库时读过的几十个文件和失败的尝试都留在子智能体的上下文里，主上下文只收到几百 token 的结论，不会因探索的噪声而变长、变差。二是并行：彼此独立的子任务可以同时运行，缩短等待时间。
+
+代价同样明显。token 用量成倍增加：每个子智能体都要重新读入自己的系统提示和材料，且从冷缓存起步；Anthropic 报告其多智能体研究系统的 token 用量约为普通对话的 15 倍~\cite{anthropic2025multiagent}。交接时丢信息：摘要只保留子智能体认为重要的内容，主循环看不到它读过的原文。多个智能体写同一份状态容易冲突：两个子智能体同时修改同一个文件，各自的修改都基于对方改动之前的版本。
+
+因此，多智能体适合读多写少的广度搜索（调研、在大型代码库里定位问题）和彼此独立的子任务；不适合强耦合的代码修改，那里每一步都依赖前一步的完整上下文。
+
+另一个常见的例子是 reviewer 架构：一个智能体做事，另一个在新上下文里判题。执行者写完代码后，harness 开一个 reviewer，只给它任务说明和改动结果，让它读 diff、运行测试、对照需求逐条检查，再把意见交回执行者修改，直到 reviewer 认可为止。隔离在这里同样是关键：执行者的上下文里满是自己的推理和中途的假设，容易相信自己已经做对；reviewer 看不到这些理由，只能从结果本身判断，更容易发现遗漏和偏离需求的地方。这与第 \ref{sec:test-time-scaling} 节的判题器是同一个思路，只是判题器换成了一个能读代码、跑命令的智能体。
+
+reviewer 的效果取决于它掌握了执行者没有的东西：能实际运行的测试、一份明确的验收标准，或者更强的模型。若 reviewer 与执行者是同一个模型、手里也只有同样的信息，二者的盲区相同，执行者想错的地方 reviewer 往往也看不出来。每多一轮审查也要多付一份读入上下文的成本。
+
+怎样拆分任务、派生几个子智能体、谁做事谁审查，这类编排起初也写在 harness 里，是一条固定的多智能体流水线。现在编排本身也可以交给模型：Claude Code 的 dynamic workflow 让模型针对当前任务现写一段编排脚本，决定派生哪些子智能体、哪些并行运行、结果怎样汇总与核验，harness 只负责执行这段脚本。这与表 \ref{tab:agent-decision-shift} 的其他各行是同一个趋势：交给模型决定的事越来越多，harness 越来越薄。
+
+\section{评测：评的是模型加 harness}
+\label{sec:agent-eval}
+
+智能体评测的对象是模型、harness 与环境的组合；同一个模型换一套 harness，分数可能相差很大（第 \ref{sec:agent-division} 节）。报告结果时要写明 harness 的配置：工具集、最大轮数、上下文管理方式、允许尝试几次。
+
+结果用可执行的检查判定，而不是由人或模型打分。例如 SWE-bench 取真实 GitHub 仓库中的 issue，看智能体的修复能否通过原修复附带的测试~\cite{jimenez2024swebench}；\(\tau\)-bench 让智能体与模拟用户对话并调用业务接口，最后比较数据库状态是否符合预期~\cite{yao2024taubench}；Terminal-Bench 把任务放进容器化的终端环境，任务是要在命令行里完成的实际工作，由任务自带的测试检查最终状态~\cite{merrill2026terminalbench}；它按版本持续更新，把前沿模型已能稳定解决的任务移除。它的科学分支 Terminal-Bench-Science 收集了生命、物理、地球、数学与工程科学中的 70 个研究型任务，包括数据分析、统计推断、模拟、反问题和定理证明，智能体产出的分析结果、代码或证明由可复现的测试检验~\cite{tbenchscience}。Humanity's Last Exam（HLE）是一百多个学科的 2500 道专家级题目，答案是可以自动比对的短答案~\cite{phan2026hle}；它原本测的是单次作答的知识与推理，允许搜索和运行代码之后，也常用来比较智能体。
+
+基准同时标出了当前能力的缺口和接下来的方向。一类任务一旦能被自动判定，判定程序就可以直接用作可验证奖励（第 \ref{sec:post-training} 节），任务也就成了训练目标；业界常说“凡是能评估的，就能被解决”。不少基准发布时前沿模型只得几个百分点，一两年后就接近饱和，于是又要做更难的版本，或转向新的方向。做出一个好基准本身也越来越难：题目要由领域专家出，环境要能复现，判定程序还要防得住投机；Terminal-Bench-Science 从 920 份任务提案中最终只留下 70 个。基准和训练数据是一体两面：同一套任务加判定程序，拿来评测是基准，拿来训练就是数据。它们与算力并列，是大模型训练中最有价值的投入。
+
+智能体每次运行的轨迹不同，同一任务需要多次尝试。设某任务单次成功的概率为 \(p\)，做 \(k\) 次独立尝试，
+\begin{equation}
+ \text{pass@}k=1-(1-p)^k,\qquad \text{pass}^k=p^k.
+\end{equation}
+pass@\(k\) 是 \(k\) 次中至少一次成功的概率，衡量试几次总能做成；pass\(^k\) 是 \(k\) 次全部成功的概率，衡量每次都能做成。\(p=0.8\)、\(k=4\) 时，前者约为 0.998，后者只有 0.41。有判题器可以从多次结果中挑选时（第 \ref{sec:test-time-scaling} 节），pass@\(k\) 是合适的指标；面对用户、只有一次机会的部署场景，pass\(^k\) 更接近实际体验。
+
+除成功率外还需记录几项。一是每个任务的成本与轮次：两个成功率相同的智能体，一个平均 10 轮、一个平均 60 轮，按式 \eqref{eq:agent-input-total} 的参数，累计输入相差约 20 倍。二是小基准的方差：100 个任务、成功率 50\% 时，标准误约 \(\sqrt{0.5\times0.5/100}=5\%\)，几个百分点的差别不足以区分两个系统。三是数据污染：公开仓库的 issue 与修复可能已在预训练语料中。四是奖励投机（reward hacking）：智能体可能修改或删除测试使其通过，或针对测试输入写死结果；评测须使用智能体看不到、改不了的测试，并检查改动范围。训练中的可验证奖励面对同样的漏洞。
+
+\clearpage
+\section{智能体机制汇总}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\bfseries\raggedright\arraybackslash}p{26mm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{45mm}}
+\toprule
+机制 & 在 harness 里怎么做 & 对应前文\\
+\midrule
+主循环 & 调用模型、执行工具、写回结果；无工具调用时退出 & 自回归生成（第 \ref{sec:autoregressive} 节）\\
+工具调用 & chat template 渲染工具定义；解析特殊 token 包住的调用 & SFT 与 RLVR（第 \ref{chap:training-methods} 章）\\
+智能体训练 & 沙箱中运行主循环；工具返回不计入损失；测试结果作奖励 & 指令 mask（第 \ref{sec:sft} 节）、RLVR（第 \ref{sec:post-training} 节）\\
+前缀缓存 & 固定前缀顺序，只追加不改写 & KV cache（第 \ref{chap:inference-systems} 章）\\
+空闲会话的缓存 & 服务端 TTL、卸载到 CPU 内存或 SSD、前缀树共享 & KV 规模（第 \ref{sec:kv-budget} 节）、RadixAttention（第 \ref{sec:paged-serving} 节）\\
+上下文压缩 & 截断工具输出；摘要替换历史；待办列表 & 注意力读取随上下文线性增长（第 \ref{chap:inference-systems} 章）\\
+渐进式披露 & skill、memory、项目说明只常驻索引，正文按需读取 & 前缀缓存（本章）\\
+代码检索 & grep、glob、read 直接在文件上精确匹配 & 与向量检索对照（第 \ref{sec:agent-search} 节）\\
+bash 与沙箱 & 一个通用工具；权限、沙箱与白名单设在 harness & 预训练数据分布（第 \ref{chap:training-methods} 章）\\
+多智能体 & 子智能体在新上下文中运行，只交回摘要；编排可交给模型 & 从冷缓存起步（第 \ref{sec:agent-cache} 节）\\
+评测 & 可执行检查；报告 pass@\(k\)、pass\(^k\) 与成本 & 推理式扩展（第 \ref{sec:test-time-scaling} 节）\\
+\bottomrule
+\end{tabularx}
+\caption{本章机制在 harness 中的实现及其与前文的对应。}
+\label{tab:agent-mechanisms}
+\end{table}

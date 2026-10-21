@@ -1,0 +1,35 @@
+% Figure: every modern-architecture change edits one segment of the same token-to-distribution path.
+% Design width ~168mm, height ~62 mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+
+\node[lblt,anchor=south,align=center] at (84,60)
+  {one path: each architecture change edits one segment of it};
+\node[nsoft,minimum width=26mm,minimum height=11mm] (tok) at (16,42) {token $x_t$};
+\node[nteal,minimum width=40mm,minimum height=11mm] (mem) at (60,42)
+  {history memory\\MHA / MLA / KDA};
+\node[norange,minimum width=36mm,minimum height=11mm] (route) at (105,42)
+  {sparse compute\\MoE / experts};
+\node[nteal,minimum width=34mm,minimum height=11mm] (logit) at (148,42)
+  {logits\\$p(x_{t+1}\mid x_{\le t})$};
+\draw[ar] (tok)--(mem);
+\draw[ar] (mem)--(route);
+\draw[ar] (route)--(logit);
+\node[lbl,anchor=north,align=center] at (60,35.2) {memory axis:\\what history is kept};
+\node[lblo,anchor=north,align=center] at (105,35.2)
+  {capacity axis:\\what each token computes};
+% ------------------------------------------------------- training stages
+\node[nsoft,minimum width=52mm,minimum height=11mm] (pre) at (40,13)
+  {pretraining: MLE\\$+$ numerical stability};
+\node[nsoft,minimum width=52mm,minimum height=11mm] (post) at (130,13)
+  {post-training: SFT /\\preference / RL};
+\draw[ard] (pre.north)--(60,26)--(60,36.5);
+\draw[ard] (pre.north)--(105,26)--(105,36.5);
+\draw[ard] (post.north)--(148,26)--(148,36.5);
+\node[lbl,anchor=north,align=center] at (40,6) {changes the backbone\\and the router};
+\node[lbl,anchor=north,align=center] at (130,6) {changes the output\\distribution};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,103 @@
+% Latent diffusion pipeline on top; the shared denoiser opened up below as a
+% U-Net (multi-resolution convolution with skips) or a DiT (patch tokens through
+% Transformer blocks), with the time embedding and text condition injected.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  % ---------------------------------------------------------------- pipeline
+  \node[ptitleo,anchor=west] at (0,74) {训练};
+  \node[ptitle,anchor=west] at (0,64) {生成};
+  \node[nsoft,minimum width=13mm] (x) at (16,74) {图像 $x$};
+  \node[sub] at (16,68.6) {$512{\times}512{\times}3$};
+  \node[nnavy,minimum width=10mm] (enc) at (31,74) {$\mathcal E$};
+  \node[nteal,minimum width=9mm] (z0) at (44,74) {$z_0$};
+  \node[sub] at (44,68.6) {$64{\times}64{\times}4$};
+  \node[norange,minimum width=29mm] (noise) at (68,74) {加噪 $z_t=a_tz_0+b_t\epsilon$};
+  \node[nteal,minimum width=22mm] (zT) at (68,64) {$z_T\sim\mathcal N(0,I)$};
+  \node[nteal,minimum width=30mm,minimum height=18mm,line width=0.9pt] (net) at (105,69)
+    {去噪网络\\[1mm]$\epsilon_\theta(z_t,t,c)$};
+  \node[norange,minimum width=20mm] (loss) at (146,74) {$\|\epsilon-\hat\epsilon\|^2$};
+  \node[nteal,minimum width=9mm] (zg) at (134,64) {$z_0$};
+  \node[nnavy,minimum width=8mm] (dec) at (148,64) {$\mathcal D$};
+  \node[nsoft,minimum width=9mm] (xg) at (161,64) {$\hat x$};
+  \draw[ar] (x) -- (enc);
+  \draw[ar] (enc) -- (z0);
+  \draw[arorange] (z0) -- (noise);
+  \draw[arorange] (noise.east) -- (90,74);
+  \draw[arorange] (120,74) -- (loss.west);
+  \draw[arteal] (zT.east) -- (90,64);
+  \draw[arteal] (120,64) -- node[lblt,above=0.3mm] {$K$ 步} (zg.west);
+  \draw[ar] (zg) -- (dec);
+  \draw[ar] (dec) -- (xg);
+  % zoom guides
+  \draw[guide] (90,60) -- (2,54.5);
+  \draw[guide] (120,60) -- (166,54.5);
+  % ---------------------------------------------------------------- U-Net
+  \draw[draw=FSlate!35,fill=FMist!60,rounded corners=2pt] (2,0) rectangle (96,54);
+  \node[ptitle] at (49,50.5) {U-Net：多分辨率卷积 + 跳跃连接};
+  \node[sub] at (49,46.6) {方块为残差卷积块：高 $=$ 空间分辨率，宽 $=$ 通道数};
+  \node[mathb] (uin) at (8,36) {$z_t$};
+  \foreach \cx/\cy/\w/\h/\n in {18/36/3/16/e1,32/26/5/10/e2,48/18/7/6/b,64/26/5/10/d2,78/36/3/16/d1} {
+    \draw[draw=FTeal,fill=FSky,line width=0.6pt] (\cx-\w/2,\cy-\h/2) rectangle (\cx+\w/2,\cy+\h/2);
+  }
+  \node[mathb] (uout) at (89,36) {$\hat\epsilon$};
+  \draw[arteal] (uin) -- (16.5,36);
+  \draw[arteal] (19.5,31) -- (29.5,28);
+  \draw[arteal] (34.5,23) -- (44.5,19);
+  \draw[arteal] (51.5,19) -- (61.5,23);
+  \draw[arteal] (66.5,28) -- (76.5,31);
+  \draw[arteal] (79.5,36) -- (uout);
+  \node[lbl] at (27.5,33.6) {下采样 $\times\tfrac12$};
+  \node[lbl] at (68.5,33.6) {上采样 $\times2$};
+  \node[lbl] at (48,24.2) {自注意力};
+  \draw[arteal,dashed] (19.5,42) -- (76.5,42);
+  \draw[arteal,dashed] (34.5,29) -- (61.5,29);
+  \node[lblt] at (48,39.6) {跳跃连接：同分辨率特征直接送到恢复路径};
+  % time embedding and text condition
+  \draw[FNavy,line width=0.7pt] (9,5) -- (80,5);
+  \node[mathb,text=FNavy,anchor=east] at (8.6,5) {$e_t$};
+  \foreach \px/\top in {17/28,31/21,47/15,63/21,77/28} {
+    \draw[-{Latex[length=1.3mm,width=1.1mm]},FNavy,line width=0.55pt] (\px,5) -- (\px,\top);
+  }
+  \node[lbln,anchor=north] at (44,4.2) {每个块：$h\leftarrow h+W_\ell e_t$};
+  \draw[FOrange,line width=0.7pt] (30,10) -- (80,10);
+  \node[mathb,text=FOrange,anchor=east] at (29.6,10) {$c$};
+  \foreach \px/\top in {33.5/21,49.5/15,65.5/21} {
+    \draw[-{Latex[length=1.3mm,width=1.1mm]},FOrange,line width=0.55pt] (\px,10) -- (\px,\top);
+  }
+  \node[lblo,anchor=west] at (80.6,10) {交叉注意力};
+  % ---------------------------------------------------------------- DiT
+  \draw[draw=FSlate!35,fill=FMist!60,rounded corners=2pt] (100,0) rectangle (166,54);
+  \node[ptitle] at (133,50.5) {DiT：patch 序列 + Transformer};
+  \draw[draw=FTeal,fill=FSky,line width=0.6pt] (103,30) rectangle (115,42);
+  \draw[FTeal,line width=0.4pt] (107,30) -- (107,42) (111,30) -- (111,42) (103,34) -- (115,34) (103,38) -- (115,38);
+  \node[mathb] at (109,26.8) {$z_t$};
+  \draw[arteal] (115.6,36) -- (120,36);
+  \node[lbl] at (118,40) {切块};
+  \foreach \k in {0,...,4} {
+    \draw[draw=FTeal,fill=FTeal!35,line width=0.4pt] (120.6,29.4+3*\k) rectangle +(2.6,2.6);
+  }
+  \node[lbl] at (122,26.5) {token};
+  \draw[arteal] (123.8,36) -- (128,36);
+  \draw[draw=FTeal,fill=FSky,rounded corners=1.2pt,line width=0.7pt] (128,24) rectangle (150,46);
+  \node[font=\scriptsize,text=FInk] at (139,42) {自适应归一化};
+  \node[font=\scriptsize,text=FInk] at (139,37.5) {自注意力};
+  \node[font=\scriptsize,text=FInk] at (139,33) {交叉注意力};
+  \node[font=\scriptsize,text=FInk] at (139,28.5) {MLP};
+  \foreach \yy in {39.75,35.25,30.75} {\draw[FTeal!50,line width=0.4pt] (130,\yy) -- (148,\yy);}
+  \node[lbln,anchor=west] at (150.4,44) {$\times N$};
+  \draw[arteal] (150,36) -- (155.4,36);
+  \draw[draw=FTeal,fill=FSky,line width=0.6pt] (156,31.5) rectangle (165,40.5);
+  \draw[FTeal,line width=0.4pt] (159,31.5) -- (159,40.5) (162,31.5) -- (162,40.5) (156,34.5) -- (165,34.5) (156,37.5) -- (165,37.5);
+  \node[mathb] at (160.5,28) {$\hat\epsilon$};
+  \draw[-{Latex[length=1.3mm,width=1.1mm]},FNavy,line width=0.55pt] (134,12.5) -- (134,24);
+  \node[mathb,text=FNavy] at (134,10.4) {$e_t$};
+  \node[lbln,anchor=north] at (125,7.4) {调节缩放、平移、门控};
+  \draw[-{Latex[length=1.3mm,width=1.1mm]},FOrange,line width=0.55pt] (146,12.5) -- (146,24);
+  \node[mathb,text=FOrange] at (146,10.4) {$c$};
+  \node[lblo,anchor=north] at (153,7.4) {交叉注意力};
+\end{tikzpicture}
+\end{document}

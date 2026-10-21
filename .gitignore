@@ -1,0 +1,40 @@
+# Whitelist: only the paths listed below are published. Everything else in the
+# working directory (notes, drafts, deprecated material, build output) stays local.
+/*
+!/.gitignore
+!/.github/
+!/LICENSE
+!/Makefile
+!/README.md
+!/README.en.md
+!/book/
+!/figures/
+!/docs/
+
+# Slides are not public yet; only the placeholder is tracked. Each offering of
+# the course lives in its own folder next to slides/shared/. To publish, add
+#   !/slides/shared/
+#   !/slides/2026-10-gscaep/
+# (shared/tools/ holds a Python figure script; add /slides/shared/tools/ to keep it private).
+!/slides/
+/slides/*
+!/slides/README.md
+
+# LaTeX by-products, in case something is compiled in place
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.synctex(busy)
+*.toc
+*.vrb
+*.xdv
+.DS_Store

@@ -1,0 +1,34 @@
+% Figure: mHC widens the residual stream and forces the depth-mixing matrix onto the doubly stochastic set, so neither signal nor gradient scale drifts.
+% Design width ~168mm, height ~58 mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+
+\node[lblt,anchor=south,align=center] at (84,58)
+  {the constraint applies to the depth mixing, not to the attention read};
+\node[nsoft,minimum width=30mm,minimum height=12mm] (xl) at (17,40)
+  {$X_l$\\$n_{hc}\times d$};
+\node[nteal,minimum width=30mm,minimum height=12mm] (a) at (51,40)
+  {$A_l$: pre-map\\to layer input};
+\node[norange,minimum width=30mm,minimum height=12mm] (f) at (85,40)
+  {$\mathcal F_l$\\attention / MoE};
+\node[nteal,minimum width=30mm,minimum height=12mm] (cl) at (119,40)
+  {$C_l$: post-map\\back to $n_{hc}$};
+\node[nsoft,minimum width=30mm,minimum height=12mm] (out) at (153,40)
+  {$X_{l+1}$\\$n_{hc}\times d$};
+\node[norange,minimum width=46mm,minimum height=11mm] (b) at (85,12)
+  {$B_l$: doubly stochastic mixing};
+\draw[ar] (xl)--(a);
+\draw[ar] (a)--(f);
+\draw[ar] (f)--(cl);
+\draw[ar] (cl)--(out);
+\draw[ar] (xl.south) to[bend right=26] (b.west);
+\draw[ar] (b.east) to[bend right=26] (out.south);
+\node[lbl,anchor=north,align=center] at (42,33)
+  {dynamic $+$ static:\\a learned and an input-dependent path};
+\node[lbl,anchor=south,align=center] at (85,19.5)
+  {row and column sums approach $1$\\after Sinkhorn iterations};
+\end{tikzpicture}
+\end{document}

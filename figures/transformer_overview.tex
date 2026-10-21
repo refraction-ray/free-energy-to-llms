@@ -1,0 +1,29 @@
+\documentclass[border=2pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+% Full-page teaching diagram, three distinct routes; read bottom to top.
+\node[ptitle,anchor=south] at (34,69) {(a) Encoder--Decoder};
+\node[ptitle,anchor=south] at (97,69) {(b) BERT};
+\node[ptitle,anchor=south] at (146,69) {(c) GPT};
+\draw[guide] (70,0)--(70,67);\draw[guide] (122,0)--(122,67);
+\node[nteal,minimum width=25mm,minimum height=8mm] (src) at (13,7) {source tokens};
+\node[norange,minimum width=30mm,minimum height=8mm] (tgt) at (49,7) {target prefix};
+\node[nteal,minimum width=25mm,minimum height=22mm,font=\scriptsize] (enc) at (13,31) {ENCODER\quad$\times L$\\[3pt]bidirectional\\self-attention\\[3pt]feed-forward};
+\node[norange,minimum width=30mm,minimum height=34mm,font=\scriptsize] (dec) at (49,37) {DECODER\quad$\times L$\\[3pt]causal self-attention\\[5pt]cross-attention\\[5pt]feed-forward};
+\draw[arteal] (src)--(enc);
+\draw[arorange] (tgt)--(dec);
+\draw[arteal] (enc.east)--node[lbl,above,rotate=0]{read}(dec.west);
+\node[norange,minimum width=30mm,font=\scriptsize] (out) at (49,61) {next target token\\$p(y_t\mid y_{<t},x)$};
+\draw[arorange] (dec)--(out);
+\node[nteal,minimum width=40mm,font=\scriptsize] (bi) at (97,7) {corrupted input\\cat sits on [MASK]};
+\node[nteal,minimum width=40mm,minimum height=28mm,font=\scriptsize] (be) at (97,36) {ENCODER\quad$\times L$\\[4pt]bidirectional self-attention\\[4pt]feed-forward};
+\node[nteal,minimum width=40mm,font=\scriptsize] (bo) at (97,61) {selected-token prediction\\$p(x_i\mid\widetilde x),\ i\in\mathcal M$};
+\draw[arteal] (bi)--(be);\draw[arteal] (be)--(bo);
+\node[norange,minimum width=40mm,font=\scriptsize] (gi) at (146,7) {prefix only\\cat sits on};
+\node[norange,minimum width=40mm,minimum height=28mm,font=\scriptsize] (ge) at (146,36) {CAUSAL LAYERS\quad$\times L$\\[4pt]causal self-attention\\[4pt]feed-forward};
+\node[norange,minimum width=40mm,font=\scriptsize] (go) at (146,61) {next-token prediction\\$p(x_t\mid x_{<t})$};
+\draw[arorange] (gi)--(ge);\draw[arorange] (ge)--(go);
+\end{tikzpicture}
+\end{document}

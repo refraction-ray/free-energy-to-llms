@@ -1,0 +1,47 @@
+% GAN: the generator maps noise to samples; the discriminator scores real and generated
+% samples; two alternating losses update phi and theta, and only G is kept for sampling.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+\node[plain,anchor=west,font=\small\bfseries,text=FNavy] at (0,56) {TRAIN};
+% ------------------------------------------------------------------ generator path
+\node[nsoft,minimum width=20mm] (z) at (12,30) {noise\\$z\sim p_Z$};
+\node[trapezium,trapezium angle=70,shape border rotate=270,draw=FTeal,fill=FSky,line width=0.8pt,
+  minimum height=11mm,minimum width=9mm,inner sep=1pt,align=center,text=FInk] (G) at (37,30) {$G_\theta$};
+\node[lblt,anchor=south] at ($(G.north)+(0,2.2)$) {generator};
+\node[norange,minimum width=24mm] (xg) at (64,30) {generated\\$x_g=G_\theta(z)$};
+\draw[arteal] (z)--(G);
+\draw[arteal] (G)--(xg);
+% ------------------------------------------------------------------ real data
+\node[nteal,minimum width=24mm] (xr) at (64,48) {real data\\$x\sim p_{\mathrm{data}}$};
+% ------------------------------------------------------------------ discriminator
+\node[trapezium,trapezium angle=70,shape border rotate=90,draw=FNavy,fill=white,line width=0.8pt,
+  minimum height=11mm,minimum width=9mm,inner sep=1pt,align=center,text=FInk] (D) at (94,39) {$D_\phi$};
+\node[lbln,anchor=north] at ($(D.south)+(0,-0.8)$) {discriminator};
+\draw[arteal] (xr.east) to[out=0,in=165] ($(D.west)+(0,3)$);
+\draw[arorange] (xg.east) to[out=0,in=195] ($(D.west)+(0,-3)$);
+\node[nnavy,minimum width=22mm] (out) at (121,39) {$D_\phi(\cdot)\in(0,1)$\\prob.\ real};
+\draw[ar,draw=FNavy] (D)--(out);
+% ------------------------------------------------------------------ two losses
+\node[norange,minimum width=40mm,font=\scriptsize] (LD) at (148,50) {\textbf{D step}: update $\phi$, $G$ fixed\\$\mathcal L_D=-\log D(x)-\log(1-D(x_g))$\\{\color{FSlate}push $D(x)\to1$, $D(x_g)\to0$}};
+\node[norange,minimum width=40mm,font=\scriptsize] (LG) at (148,28) {\textbf{G step}: update $\theta$, $D$ fixed\\$\mathcal L_G=-\log D(G_\theta(z))$\\{\color{FSlate}push $D(x_g)\to1$}};
+\draw[ar] (out.north) |- (LD.west);
+\draw[ar] (out.south) |- (LG.west);
+% ------------------------------------------------------------------ gradient paths
+\draw[ard,draw=FNavy] ($(LD.north)+(-8,0)$) |- (94,58) -- ($(D.north)+(0,0.3)$);
+\node[lbln,anchor=south] at (120,58) {$\nabla_\phi\mathcal L_D$ stops at $D$};
+\draw[arorange,dashed,line width=0.9pt] (LG.south) |- (37,14) -- (G.south);
+\node[lblo,anchor=north] at (94,13.6) {$\nabla_\theta\mathcal L_G$ passes back through $D$ and $x_g$ into $G$};
+\draw[guide] (0,6) -- (168,6);
+% ------------------------------------------------------------------ generation
+\node[plain,anchor=west,font=\small\bfseries,text=FNavy] at (0,-1) {GENERATE};
+\node[nsoft,minimum width=20mm,minimum height=6mm] (z2) at (52,-1) {$z\sim p_Z$};
+\node[nteal,minimum width=14mm,minimum height=6mm] (G2) at (80,-1) {$G_\theta$};
+\node[nteal,minimum width=20mm,minimum height=6mm] (x2) at (108,-1) {sample $x$};
+\draw[arteal] (z2)--(G2);
+\draw[arteal] (G2)--(x2);
+\node[lblr,anchor=west] at (122,-1) {$D$ discarded; one forward pass};
+\end{tikzpicture}
+\end{document}

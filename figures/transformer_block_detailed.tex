@@ -1,0 +1,82 @@
+% Decoder block information flow and one causal-attention read.
+% Equal-sized cells encode attention weights by shade and number, not width.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  % One Pre-Norm decoder block. The vertical line is the residual path.
+  \node[ptitle,anchor=west] at (0,83) {Decoder block：沿残差流更新};
+  \node[nnavy,minimum width=22mm,minimum height=8mm] (hin) at (15,6) {$h^{(l)}$};
+  \node[nteal,minimum width=24mm,minimum height=7mm] (norm1) at (43,14) {RMSNorm};
+  \node[norange,minimum width=35mm,minimum height=9mm] (attn) at (43,25) {因果多头注意力};
+  \node[circle,draw=FTeal,fill=white,line width=.8pt,inner sep=0pt,
+    minimum size=5mm,font=\small,text=FTeal] (add1) at (15,36) {$+$};
+  \node[nteal,minimum width=24mm,minimum height=7mm] (norm2) at (43,43) {RMSNorm};
+  \node[nteal,minimum width=35mm,minimum height=9mm] (ffn) at (43,55) {SwiGLU / FFN};
+  \node[circle,draw=FTeal,fill=white,line width=.8pt,inner sep=0pt,
+    minimum size=5mm,font=\small,text=FTeal] (add2) at (15,66) {$+$};
+  \node[nnavy,minimum width=22mm,minimum height=8mm] (hout) at (15,76) {$h^{(l+1)}$};
+
+  \draw[arteal,line width=1.1pt] (15,10)--(add1.south);
+  \draw[arteal,line width=1.1pt] (add1.north)--(add2.south);
+  \draw[arteal,line width=1.1pt] (add2.north)--(hout.south);
+  \node[lblt,rotate=90] at (3,42) {残差路径};
+  \draw[ar] (15,14)--(norm1.west);
+  \draw[ar] (norm1.north)--(attn.south);
+  \draw[ar] (attn.north)--(43,36)--(add1.east);
+  \draw[ar] (15,43)--(norm2.west);
+  \draw[ar] (norm2.north)--(ffn.south);
+  \draw[ar] (ffn.north)--(43,66)--(add2.east);
+
+  % Causal attention: rows are queries, columns are keys.
+  \node[ptitle,anchor=west] at (76,83) {注意力：位置 3 怎样读取历史};
+  \node[mathb] at (122,74)
+    {$A=\operatorname{softmax}(QK^{\mathsf T}/\sqrt{d_k}+M),\quad O=AV$};
+  \node[lbln,anchor=west] at (128,68) {列：key $j$};
+  \foreach \c in {1,...,5} {
+    \pgfmathsetmacro{\xx}{96.5+5*\c}
+    \node[lbl] at (\xx,67.8) {\c};
+  }
+  \foreach \r in {1,...,5} {
+    \foreach \c in {1,...,5} {
+      \pgfmathsetmacro{\xx}{99+5*(\c-1)}
+      \pgfmathsetmacro{\yy}{66-5*\r}
+      \ifnum\c>\r
+        \fill[FRoseMist] (\xx,\yy) rectangle ++(5,5);
+      \else
+        \fill[FSky] (\xx,\yy) rectangle ++(5,5);
+      \fi
+    }
+  }
+  \fill[FTeal!28] (99,51) rectangle (104,56);
+  \fill[FTeal!45] (104,51) rectangle (109,56);
+  \fill[FTeal!76] (109,51) rectangle (114,56);
+  \draw[FSlate!60,line width=.45pt] (99,41) grid[step=5] (124,66);
+  \draw[FOrange,line width=1pt] (99,51) rectangle (124,56);
+  \node[lbln,anchor=east] at (96,53.5) {query $t=3$};
+  \draw[arorange] (96.5,53.5)--(98.5,53.5);
+  \node[lblr,anchor=west,align=left] at (128,59)
+    {未来位置 $j>t$\\被遮蔽};
+  \draw[arorange] (111.5,51)--(111.5,35);
+  \node[lblo,anchor=west] at (114,36) {第 3 行 softmax 权重};
+
+  % Every weight is one equally wide cell. The zero cells mask future values.
+  \foreach \x/\num/\tone/\j in {84/0.2/28/1,100/0.3/45/2,116/0.5/76/3} {
+    \node[draw=FTeal,fill=FTeal!\tone,minimum width=12mm,
+      minimum height=8mm,inner sep=0pt,font=\scriptsize,text=FNavy]
+      at (\x,27) {\num};
+    \node[nteal,minimum width=12mm,minimum height=8mm] at (\x,13) {$v_{\j}$};
+    \draw[arteal] (\x,22.7)--(\x,17.4);
+  }
+  \foreach \x/\j in {132/4,148/5} {
+    \node[draw=FRose,fill=FRoseMist,minimum width=12mm,
+      minimum height=8mm,inner sep=0pt,font=\scriptsize,text=FRose]
+      at (\x,27) {$0$};
+    \node[nsoft,minimum width=12mm,minimum height=8mm] at (\x,13) {$v_{\j}$};
+    \draw[axis] (\x,22.7)--(\x,17.4);
+  }
+  \node[mathb] at (116,3) {$o_3=0.2v_1+0.3v_2+0.5v_3$};
+\end{tikzpicture}
+\end{document}

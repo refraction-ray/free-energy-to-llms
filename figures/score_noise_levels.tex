@@ -1,0 +1,55 @@
+% Score of a two-point data set at three noise levels. The marginal score is the
+% posterior-weighted blend of the two conditional scores: steep and switching
+% sharply at low noise, nearly the single line -x at high noise.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+% x in [-4,4] maps to 48mm; density scaled by 30mm, score by 1.2mm (shared by all panels) per unit.
+% #1 = x offset, #2 = a_t, #3 = b_t^2, #4 = title
+\newcommand{\noisepanel}[4]{%
+  \begin{scope}[shift={(#1,0)}]
+    \node[ptitle] at (0,52) {#4};
+    % density row, baseline y=26
+    \begin{scope}[shift={(0,26)}]
+      \fill[FSky] plot[domain=-4:4,samples=241,smooth]
+        (\x*6,{30*0.5*(exp(-(\x-2*#2)^2/(2*#3))+exp(-(\x+2*#2)^2/(2*#3)))/sqrt(2*pi*#3)})
+        -- (24,0) -- (-24,0) -- cycle;
+      \draw[FTeal,line width=0.9pt] plot[domain=-4:4,samples=241,smooth]
+        (\x*6,{30*0.5*(exp(-(\x-2*#2)^2/(2*#3))+exp(-(\x+2*#2)^2/(2*#3)))/sqrt(2*pi*#3)});
+      \draw[axis] (-24.5,0) -- (24.5,0);
+      \foreach \m in {-1,1} {\draw[FNavy,line width=1pt] ({12*#2*\m},-1.2) -- ({12*#2*\m},1.2);}
+    \end{scope}
+    % score row, zero line at y=0
+    \begin{scope}
+      \clip (-24.5,-15) rectangle (24.5,15);
+      \draw[FSlate!40,line width=0.4pt] (-24,0) -- (24,0);
+      \draw[FOrange,line width=1.6pt] plot[domain=-4:4,samples=401,smooth]
+        (\x*6,{1.2*(-\x+2*#2*tanh(max(-9,min(9,2*#2*\x/#3))))/#3});
+      \foreach \m in {-1,1} {
+        \draw[FTeal,densely dashed,line width=0.6pt]
+          plot[domain=-4:4,samples=2] (\x*6,{-1.2*(\x-2*#2*\m)/#3});
+      }
+    \end{scope}
+    \draw[axis] (-24.5,-15) rectangle (24.5,15);
+    \foreach \t in {-2,0,2} {
+      \draw[FSlate!70,line width=0.4pt] (\t*6,-15) -- (\t*6,-14);
+      \node[lbl,anchor=north] at (\t*6,-15.4) {$\t$};
+    }
+  \end{scope}
+}
+\begin{document}
+\begin{tikzpicture}
+  \noisepanel{26}{0.954}{0.09}{低噪声\quad $b_t=0.3$}
+  \noisepanel{83}{0.8}{0.36}{中等噪声\quad $b_t=0.6$}
+  \noisepanel{140}{0.312}{0.9025}{高噪声\quad $b_t=0.95$}
+  \node[mathb,anchor=east] at (1,33) {$p_t$};
+  \node[mathb,anchor=east] at (1,0) {$s_t$};
+  \node[lbln,anchor=north] at ({26+12*0.954},24.4) {$a_tx_0$};
+  \node[lbln,anchor=north] at ({26-12*0.954},24.4) {$a_tx_0'$};
+  \node[lblt,anchor=north,align=center] at (83,-21.5)
+    {虚线：两个条件 score $-(x-a_tx_0)/b_t^2$，各自指向一个数据点};
+  \node[lblo,anchor=north,align=center] at (83,-26)
+    {实线：边缘 score $s_t=\mathbb E[\text{条件 score}\mid x_t]$，靠近哪个数据点就贴近哪条虚线};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,58 @@
+% Speculative decoding: a cheap draft proposes tokens serially, while one
+% target-model pass verifies their conditional probabilities in parallel.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  \node[ptitle,anchor=west] at (0,78) {推测解码：草稿模型提议，目标模型一次验证};
+
+  % Draft proposals are generated one after another.
+  \node[lbln] at (82,72) {逐个生成候选};
+  \node[nteal,minimum width=25mm,minimum height=9mm] (draft) at (15,64) {草稿模型 $q$};
+  \foreach \x/\i in {48/1,68/2,88/3,108/4} {
+    \node[norange,minimum width=15mm,minimum height=9mm] (x\i) at (\x,64) {$x_\i$};
+  }
+  \draw[arorange] (draft.east)--(x1.west);
+  \draw[arorange] (x1.east)--(x2.west);
+  \draw[arorange] (x2.east)--(x3.west);
+  \draw[arorange] (x3.east)--(x4.west);
+
+  % A single causal target pass evaluates all proposed positions.
+  \node[nteal,minimum width=81mm,minimum height=12mm] (target) at (78,45)
+    {目标模型 $p_\theta$\\一次前向验证四个位置};
+  \foreach \x in {48,68,88,108} {
+    \draw[arteal] (\x,59.4)--(\x,51.6);
+    \draw[ar] (\x,38.8)--(\x,33.6);
+  }
+
+  % The acceptance decision is sequential: after the first rejection, later
+  % draft tokens are discarded even though the target pass evaluated them.
+  \node[text=FTeal,font=\Large] at (48,29.5) {$\checkmark$};
+  \node[text=FTeal,font=\Large] at (68,29.5) {$\checkmark$};
+  \node[text=FRose,font=\Large] at (88,29.5) {$\times$};
+  \node[text=FSlate,font=\Large] at (108,29.5) {$\times$};
+  \node[lblt] at (48,22) {接受};
+  \node[lblt] at (68,22) {接受};
+  \node[lblr] at (88,22) {首次拒绝};
+  \node[lbl] at (108,22) {后续丢弃};
+  \draw[bracet] (40,17)--(76,17);
+  \node[lblt] at (58,12.5) {保留前缀 $x_1,x_2$};
+  \draw[arrose] (88,17)--(88,13);
+  \node[nrose,minimum width=24mm,minimum height=8mm] at (88,7.5) {修正采样};
+  \node[lbln] at (19,7.5) {目标模型仅做一次前向};
+
+  % Comparison: ordinary decoding needs a separate target pass per token.
+  \draw[FSlate!40,line width=.6pt] (125,5)--(125,74);
+  \node[lbln] at (147,72) {普通逐 token 解码};
+  \foreach \y/\i in {61/1,47/2,33/3,19/4} {
+    \node[nsoft,minimum width=31mm,minimum height=8mm] (p\i) at (147,\y)
+      {$p_\theta\ \to\ x_\i$};
+  }
+  \draw[ar] (p1.south)--(p2.north);
+  \draw[ar] (p2.south)--(p3.north);
+  \draw[ar] (p3.south)--(p4.north);
+  \node[lbl] at (147,8) {四次串行前向};
+\end{tikzpicture}
+\end{document}

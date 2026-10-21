@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    container: texlive/texlive:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CJK fonts
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends make fonts-noto-cjk
+          fc-cache -f
+
+      - name: Build figures and book
+        run: make -B -j4 LOCALE=C.UTF-8
+
+      - name: Name the PDF
+        run: |
+          name=free-energy-to-llms
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="$name-$GITHUB_REF_NAME"; fi
+          cp book/free-energy-to-llms.pdf "$name.pdf"
+          echo "PDF=$name.pdf" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: book-pdf
+          path: ${{ env.PDF }}
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PDF }}
+          generate_release_notes: true

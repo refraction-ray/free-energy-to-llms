@@ -1,0 +1,41 @@
+% Figure: Kimi K3 mixes a fixed-state mixer with a global one along the sequence axis, and adds a selective read along the depth axis.
+% Design width ~168mm, height ~62 mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+
+\node[nsoft,minimum width=26mm,minimum height=12mm] (emb) at (15,44)
+  {embedding /\\vision stream};
+\node[nteal,minimum width=28mm,minimum height=12mm] (k1) at (47,44)
+  {KDA $+$\\Stable LatentMoE};
+\node[nteal,minimum width=28mm,minimum height=12mm] (k2) at (79,44)
+  {KDA $+$\\Stable LatentMoE};
+\node[nteal,minimum width=28mm,minimum height=12mm] (k3) at (111,44)
+  {KDA $+$\\Stable LatentMoE};
+\node[norange,minimum width=28mm,minimum height=12mm] (mla) at (143,44)
+  {Gated MLA $+$\\Stable LatentMoE};
+\draw[ar] (emb)--(k1);
+\draw[ar] (k1)--(k2);
+\draw[ar] (k2)--(k3);
+\draw[ar] (k3)--(mla);
+\draw[ar] (mla)--(165,44);
+\node[lblt,anchor=south,align=center] at (95,51.4)
+  {sequence axis: three fixed-state mixers, then one global attention layer};
+\node[lbl,anchor=west] at (166.5,44) {repeat};
+% ------------------------------------------------------- depth axis
+\node[nsoft,minimum width=26mm,minimum height=11mm] (b0) at (24,12)
+  {embedding\\$b_0$};
+\node[norange,minimum width=48mm,minimum height=11mm] (attn) at (84,12)
+  {Block AttnRes: pseudo-query $w_l$\\selects over earlier blocks};
+\node[nsoft,minimum width=36mm,minimum height=11mm] (bn) at (148,12)
+  {block outputs\\$b_1,\ldots,b_N$};
+\draw[ar] (b0)--(attn);
+\draw[ar] (attn)--(bn);
+\draw[ard] (k1.south) to[bend right=14] (attn.north west);
+\draw[ard] (k3.south) to[bend left=14] (attn.north east);
+\node[lbl,anchor=north,align=center] at (84,5.4)
+  {depth axis: a layer reads any earlier block, not only the running residual sum};
+\end{tikzpicture}
+\end{document}

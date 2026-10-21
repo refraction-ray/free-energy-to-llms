@@ -1,0 +1,127 @@
+% KDA: a fixed-size key-by-value state is decayed, corrected by the current
+% key/value prediction error, and read with the current query.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  \node[ptitle,anchor=west] at (0,105) {Kimi Linear / KDA：旧记忆衰减，再用预测误差纠错};
+
+  % Old state: four key channels by six value channels.
+  \foreach \r in {0,...,3} {
+    \foreach \c in {0,...,5} {
+      \pgfmathtruncatemacro{\tone}{35+mod(11*\r+7*\c,43)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.23pt]
+        (5+4*\c,67+5*\r) rectangle +(4,5);
+    }
+  }
+  \draw[FTeal!70,line width=.55pt] (5,67) rectangle (29,87);
+  \node[mathb] at (17,62) {$S_{t-1}$};
+
+  % Channel-wise retention: the matrix keeps its shape, rows fade differently.
+  \foreach \r in {0,...,3} {
+    \pgfmathtruncatemacro{\atone}{30+16*\r}
+    \filldraw[fill=FOrange!\atone!white,draw=white,line width=.25pt]
+      (36+3*\r,91) rectangle +(3,4);
+  }
+  \node[mathb] at (42,98.5) {$\alpha_t$};
+  \node[mathb] at (42,77) {$\times$};
+  \draw[arteal] (29,77)--(37,77);
+  \draw[arteal] (48,77)--(54,77);
+  \draw[arorange] (42,90)--(42,81);
+  \foreach \r in {0,...,3} {
+    \foreach \c in {0,...,5} {
+      \pgfmathtruncatemacro{\tone}{20+mod(7*\r+6*\c,31)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.23pt]
+        (54+4*\c,67+5*\r) rectangle +(4,5);
+    }
+  }
+  \draw[FTeal!70,line width=.55pt] (54,67) rectangle (78,87);
+  \node[mathb] at (66,62) {$\widetilde S_{t-1}$};
+
+  % The decayed memory predicts what the current key would retrieve.
+  \foreach \d in {0,...,3} {
+    \pgfmathtruncatemacro{\tone}{43+mod(13*\d,36)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (86+3*\d,51) rectangle +(3,6);
+  }
+  \node[mathb] at (99,47) {$k_t$};
+  \draw[arteal] (78,72) to[out=-17,in=160] (104,54);
+  \draw[arteal] (98,54)--(104,54);
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{38+mod(9*\d,41)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (105+4*\d,51) rectangle +(4,6);
+  }
+  \node[eqn] at (117,62) {$\widetilde S_{t-1}^{\mathsf T}k_t$};
+  \node[mathb] at (117,47) {$\hat v_t$};
+
+  % Actual value minus old prediction: a value-shaped correction vector.
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{38+mod(7*\d,39)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (63+4*\d,34) rectangle +(4,6);
+  }
+  \node[mathb] at (75,29) {$v_t$};
+  \node[mathb] at (96,37) {$-$};
+  \draw[arteal] (87,37)--(91,37);
+  \draw[arorange] (129,54)--(133,54)--(133,44)--(101,44)--(101,39);
+  \draw[arorange] (101,37)--(104,37);
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{30+mod(15*\d,45)}
+    \filldraw[fill=FOrange!\tone!white,draw=white,line width=.25pt]
+      (105+4*\d,34) rectangle +(4,6);
+  }
+  \node[mathb] at (117,29.5) {$e_t$};
+
+  % Outer product: the same key is reused, the error supplies value columns.
+  \draw[FTeal,line width=.7pt] (90,50)--(90,25);
+  \foreach \r in {0,...,3} {
+    \pgfmathtruncatemacro{\tone}{43+mod(13*\r,36)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.22pt]
+      (88,5+5*\r) rectangle +(4,5);
+  }
+  \node[mathb] at (99,15) {$\otimes$};
+  \draw[arorange] (126,33)--(126,26);
+  \foreach \r in {0,...,3} {
+    \foreach \c in {0,...,5} {
+      \pgfmathtruncatemacro{\tone}{22+mod(9*\r+11*\c,42)}
+      \filldraw[fill=FOrange!\tone!white,draw=white,line width=.23pt]
+        (105+4*\c,5+5*\r) rectangle +(4,5);
+    }
+  }
+  \draw[FOrange!80,line width=.55pt] (105,5) rectangle (129,25);
+  \node[mathb] at (117,0) {$\Delta S_t$};
+
+  % The correction joins the retained state; the query reads the updated state.
+  \draw[arteal] (78,83)--(136,83);
+  \draw[FOrange,line width=.8pt] (129,15)--(136,15)--(136,83);
+  \node[lblo,anchor=west,fill=white,inner sep=1pt] at (138,57) {$\beta_t k_t e_t^{\mathsf T}$};
+  \node[mathb,fill=white,inner sep=1pt] at (136,83) {$+$};
+  \draw[arteal] (141,83)--(145,83);
+  \foreach \r in {0,...,3} {
+    \foreach \c in {0,...,5} {
+      \pgfmathtruncatemacro{\tone}{38+mod(9*\r+7*\c,38)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.23pt]
+        (145+4*\c,67+5*\r) rectangle +(4,5);
+    }
+  }
+  \draw[FTeal!80,line width=.55pt] (145,67) rectangle (169,87);
+  \node[mathb] at (157,92) {$S_t$};
+  \foreach \d in {0,...,3} {
+    \pgfmathtruncatemacro{\tone}{43+mod(11*\d,38)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (149+3*\d,48) rectangle +(3,6);
+  }
+  \node[mathb] at (155,44) {$q_t$};
+  \draw[arteal] (155,55)--(155,66);
+  \draw[arteal] (169,77)--(176,77);
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{38+mod(13*\d,40)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (177+3*\d,74) rectangle +(3,6);
+  }
+  \node[mathb] at (186,69) {$o_t=S_t^{\mathsf T}q_t$};
+\end{tikzpicture}
+\end{document}

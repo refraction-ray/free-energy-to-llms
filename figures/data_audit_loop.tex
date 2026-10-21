@@ -1,0 +1,48 @@
+% Figure: traceable data-to-deployment loop.  An audit only means something if four
+% facts are recorded: where a sample came from, how the split was made, which
+% distribution it was evaluated on, and which generated samples were fed back.
+% Design width ~168mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+\figtitle{A traceable data-to-deployment loop}
+% ------------------------------------------------------------------ band labels
+\node[ptitle] at (19,-11) {sources};
+\node[ptitle] at (52,-11) {split gate};
+% ---------------------------------------------------------------------- sources
+\draw[guide,dashed] (2,-14) rectangle (36,-38.8);
+\foreach \x/\y in {7/-19,12/-17,16/-21,10/-22,20/-20,17/-24}
+  {\fill[FTeal] (\x,\y) circle (1.1);}
+\foreach \x/\y in {23/-25,28/-27,26/-21,31/-24,29/-30,24/-29}
+  {\fill[FOrange] (\x,\y) circle (1.1);}
+\foreach \x/\y in {6/-26,11/-28,15/-30,7/-29.5,13/-24}
+  {\fill[FRose] (\x,\y) circle (1.1);}
+\node[sub] at (19,-33.5) {keep source, time, entity};
+\node[sub] at (19,-36.4) {generator version};
+\draw[ar] (37,-26)--(50,-26);
+% --------------------------------------------------------------------- split gate
+\draw[FTeal,line width=2pt] (52,-14)--(52,-40);
+\node[sub] at (52,-44) {deduplicate\\split by entity, time};
+% ------------------------------------------------------- training and evaluation
+\draw[arteal] (54,-28)--(62,-21);
+\draw[arorange] (54,-33)--(62,-37);
+\node[draw=FTeal,fill=FSky,ellipse,minimum width=32mm,minimum height=13mm,%
+  align=center,text=FInk] at (80,-18) {training\\distribution};
+\node[draw=FOrange,fill=FAmber,ellipse,minimum width=32mm,minimum height=13mm,%
+  align=center,text=FInk] at (80,-34) {independent\\evaluation};
+\draw[ar] (96,-19)--(114,-26);
+\draw[ar] (96,-33)--(114,-32);
+% --------------------------------------------------------------- model + sampler
+\node[nteal,minimum width=51mm,minimum height=17mm,align=center] at (141.5,-29)
+  {model $+$ sampler\\validity $\cdot$ coverage\\calibration $\cdot$ OOD};
+\draw[arteal,dashed] (152,-20)--(152,-13);
+\node[sub,anchor=east,align=right] at (149,-14.5)
+  {validated feedback\\enters the next version};
+% --------------------------------------------------------------- feedback paths
+\draw[arrose,dashed,line width=1.1pt] (116,-38) .. controls (95,-64) and (45,-64) .. (10,-37.5);
+\node[lblr] at (62,-62.5)
+  {untracked synthetic feedback\\recursively amplifies bias and tail loss};
+\end{tikzpicture}
+\end{document}

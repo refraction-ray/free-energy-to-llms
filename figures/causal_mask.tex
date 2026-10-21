@@ -1,0 +1,51 @@
+% Figure: the causal mask blocks future keys. That single constraint makes training one parallel matmul while decode needs only one new query row.
+% Design width ~168mm, height ~62 mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+
+% ------------------------------------------------------- visibility matrix
+\node[ptitle,anchor=south west,align=left] at (2,52) {MASK: BLOCK\\EVERY FUTURE KEY};
+\foreach \i in {0,...,5}{%
+  \node[lbl,anchor=south] at ({17+6*\i},47) {$q_{\i}$};%
+  \node[lbl,anchor=east] at (11.6,{13+6*\i}) {$k_{\i}$};%
+}
+\foreach \c in {0,...,5}{%
+  \foreach \r in {0,...,5}{%
+    \ifnum\r>\c
+      \fill[FRoseMist] ({14+6*\c},{10+6*\r}) rectangle ++(6,6);%
+    \else
+      \fill[FSky] ({14+6*\c},{10+6*\r}) rectangle ++(6,6);%
+    \fi
+  }%
+}
+\draw[axis] (14,10) grid[step=6mm] (50,46);
+\draw[FNavy,line width=0.9pt] (14,10)--(50,46);
+\node[lblr,anchor=north west] at (14,8)
+  {$j>t$: set to $-\infty$, softmax weight $0$};
+\node[lblt,anchor=north west] at (14,4.4)
+  {$j\le t$: readable};
+\node[lbl,anchor=north west] at (14,0.8)
+  {rows $=$ key, columns $=$ query};
+% ------------------------------------------------------- training
+\node[ptitle,anchor=south,align=center] at (88,52) {TRAINING: ONE MATMUL};
+\node[norange,minimum width=44mm,minimum height=12mm] (fwd) at (88,42)
+  {one forward pass over\\the whole true prefix};
+\node[nteal,minimum width=44mm,minimum height=12mm] (rows) at (88,26)
+  {all $T$ rows produced\\in parallel};
+\draw[ar] (fwd)--(rows);
+\node[lbl,anchor=north,align=center] at (88,17)
+  {every position is supervised\\against the true next token};
+% ------------------------------------------------------- decoding
+\node[ptitle,anchor=south,align=center] at (143,52) {DECODE: ONE NEW ROW};
+\node[nsoft,minimum width=38mm,minimum height=12mm] (cache) at (143,42)
+  {rows $1\ldots T{-}1$\\already computed};
+\node[nteal,minimum width=38mm,minimum height=12mm] (new) at (143,26)
+  {new $q_T$ reads the\\cached $k_j,v_j$};
+\draw[ar] (cache)--(new);
+\node[lbl,anchor=north,align=center] at (143,17)
+  {same mask, a different\\computation schedule};
+\end{tikzpicture}
+\end{document}

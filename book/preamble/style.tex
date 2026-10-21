@@ -1,0 +1,48 @@
+\graphicspath{{../figures/}}
+
+\definecolor{Navy}{HTML}{14324A}
+\definecolor{Teal}{HTML}{0E7490}
+\definecolor{Sky}{HTML}{E7F5F8}
+\definecolor{Orange}{HTML}{D97706}
+\definecolor{Amber}{HTML}{FFF3D6}
+\definecolor{Ink}{HTML}{1F2937}
+\definecolor{Slate}{HTML}{64748B}
+\definecolor{CitationGray}{HTML}{6B7280}
+\definecolor{Mist}{HTML}{F5F7FA}
+\definecolor{Rose}{HTML}{9F1239}
+\definecolor{RoseMist}{HTML}{FFF1F2}
+
+\hypersetup{colorlinks=true,linkcolor=Navy,citecolor=CitationGray,urlcolor=Teal,pdftitle={生成模型与概率统计：从变分自由能到大模型的推理和训练},pdfauthor={张士欣}}
+\AtEveryCite{\color{CitationGray}\footnotesize}
+\urlstyle{same}
+\setlist[itemize]{leftmargin=2em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=2em,itemsep=3pt,topsep=3pt}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.35em}
+\captionsetup{font=small,labelfont={bf,color=Navy},labelsep=space}
+
+\pagestyle{fancy}
+\setlength{\headheight}{22.2pt}
+\fancyhf{}
+\fancyhead[R]{\small\color{Slate}生成模型与概率统计}
+\fancyfoot[C]{\small\color{Slate}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{Teal}\leaders\hrule height \headrulewidth\hfill}}
+
+\titleformat{\chapter}[display]{\normalfont\bfseries\color{Navy}}{\filleft\fontsize{42}{46}\selectfont\thechapter}{0.4em}{\filright\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{24pt}
+\titleformat{\section}{\Large\bfseries\color{Navy}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries\color{Teal}}{\thesubsection}{0.6em}{}
+
+\newtcolorbox{keybox}[1][]{enhanced,breakable,colback=Sky,colframe=Teal,boxrule=0.7pt,arc=2mm,left=4mm,right=4mm,top=2mm,bottom=2mm,title={#1},fonttitle=\bfseries\color{Navy}}
+\newtcolorbox{warningbox}[1][]{enhanced,breakable,colback=RoseMist,colframe=Rose,boxrule=0.7pt,arc=2mm,left=4mm,right=4mm,top=2mm,bottom=2mm,title={#1},fonttitle=\bfseries\color{Rose}}
+\newtcolorbox{examplebox}[1][]{enhanced,breakable,colback=Mist,colframe=Slate,boxrule=0.5pt,arc=2mm,left=4mm,right=4mm,top=2mm,bottom=2mm,title={#1},fonttitle=\bfseries\color{Navy}}
+
+\tikzset{
+  flow/.style={-{Latex[length=2.2mm]},line width=0.8pt,color=Slate},
+  block/.style={draw=Navy,fill=white,rounded corners=2pt,minimum height=8mm,minimum width=25mm,align=center,font=\small},
+  tealblock/.style={block,draw=Teal,fill=Sky},
+  orangeblock/.style={block,draw=Orange,fill=Amber},
+  softblock/.style={block,draw=Slate,fill=Mist},
+  tiny/.style={font=\scriptsize,align=center},
+}

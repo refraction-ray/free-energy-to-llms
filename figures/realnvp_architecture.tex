@@ -1,0 +1,78 @@
+% Figure: one RealNVP affine coupling layer.
+% Teaching point: the coupling layer is invertible in closed form AND its
+% block-triangular Jacobian collapses to sum_j s_theta,j(x_a), which is what
+% makes exact likelihood cheap.  Design width ~168mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+% ============================================================ panel (a) title
+\node[ptitle,anchor=west] at (0,61) {One coupling layer: forward and exact inverse};
+
+% ------------------------------------------------- forward: the two branches
+\node[nnavy,minimum width=15mm,minimum height=10mm] (xin) at (7,35) {input\\$x$};
+\node[nteal,minimum width=13mm,minimum height=9mm] (xa) at (26,50) {$x_a$};
+\node[nteal,minimum width=13mm,minimum height=9mm] (xb) at (26,20) {$x_b$};
+
+\node[norange,minimum width=34mm,minimum height=11mm] (net) at (52,35)
+  {$s_\theta(x_a),\,t_\theta(x_a)$\\ never reads $x_b$};
+
+\node[nteal,minimum width=25mm,minimum height=9mm] (copy) at (72,50)
+  {identity copy\\$z_a=x_a$};
+\node[norange,minimum width=30mm,minimum height=11mm] (aff) at (76,20)
+  {$z_b=x_b\odot\exp s_\theta(x_a)$\\$+\,t_\theta(x_a)$};
+
+\node[nteal,minimum width=11mm,minimum height=9mm] (za) at (97,50) {$z_a$};
+\node[nteal,minimum width=11mm,minimum height=9mm] (zb) at (99,20) {$z_b$};
+
+\draw[ar] (13,40)--(19.5,49);
+\draw[ar] (13,30)--(19.5,21);
+\draw[ar] (29,45.5)--(46,40.5);
+\draw[ar] (32.5,50)--(59.5,50);
+\draw[ar] (32.5,20)--(61,20);
+\draw[arorange] (52,29.5)--(66,25.5);
+\draw[arteal] (84.5,50)--(91.5,50);
+\draw[arorange] (91,20)--(93.5,20);
+
+% ------------------------------------- the inverse, drawn as a usable arrow
+\draw[arteal,rounded corners=1.8mm] (99,15.5)--(99,11)--(26,11)--(26,15.5);
+\node[lblt,align=center] at (55,5.5)
+  {$x_a=z_a$,\quad $x_b=\big(z_b-t_\theta(z_a)\big)\odot\exp[-s_\theta(z_a)]$\\[1pt]
+   closed form: it re-uses the same $s_\theta,t_\theta$, now read at $z_a$};
+
+% ============================ panel (b): the block-triangular Jacobian matrix
+\node[ptitle,anchor=west] at (110,61) {Block-triangular Jacobian $\partial z/\partial x$};
+
+\node[draw=FTeal,fill=FSky,rounded corners=1.2pt,inner sep=0pt,%
+      minimum width=19mm,minimum height=10mm] at (133.5,50) {$I$};
+\node[draw=FSlate!55,fill=FMist,rounded corners=1.2pt,inner sep=0pt,%
+      minimum width=19mm,minimum height=10mm] at (154.5,50) {$0$};
+\node[draw=FNavy,fill=white,rounded corners=1.2pt,inner sep=0pt,%
+      minimum width=19mm,minimum height=10mm] at (133.5,39)
+  {$\dfrac{\partial z_b}{\partial x_a}$};
+\node[draw=FOrange,fill=FAmber,rounded corners=1.2pt,inner sep=0pt,%
+      minimum width=19mm,minimum height=10mm,align=center,font=\scriptsize]
+  at (154.5,39) {$\mathrm{diag}$\\$\exp s_\theta(x_a)$};
+
+\node[lbln,anchor=south] at (133.5,55.6) {$x_a$};
+\node[lbln,anchor=south] at (154.5,55.6) {$x_b$};
+\node[lbln,anchor=east] at (121,50) {$z_a$};
+\node[lbln,anchor=east] at (121,39) {$z_b$};
+
+\node[draw=FOrange,fill=FAmber,rounded corners=1.2pt,align=center,%
+      inner sep=2pt,font=\scriptsize,text=FInk] at (139,25.5)
+  {$\log|\det J|=\sum_j s_{\theta,j}(x_a)$\\[1pt]
+   block-triangular: det $=\det(I)\det(D)$\\[1pt]
+   so only the diagonal blocks matter};
+
+% ================= panel (c): the mask alternates, so nothing stays untouched
+\node[lbln,anchor=east] at (121.5,13) {layer 1};
+\node[lbln,anchor=east] at (121.5,4) {layer 2};
+\node[nteal,minimum width=17mm,minimum height=7mm,font=\scriptsize] at (131,13) {$x_a$ copy};
+\node[norange,minimum width=17mm,minimum height=7mm,font=\scriptsize] at (149,13) {$x_b$ affine};
+\node[norange,minimum width=17mm,minimum height=7mm,font=\scriptsize] at (131,4) {$x_a$ affine};
+\node[nteal,minimum width=17mm,minimum height=7mm,font=\scriptsize] at (149,4) {$x_b$ copy};
+\node[lbl,anchor=north] at (139,-2) {masks alternate each layer};
+\end{tikzpicture}
+\end{document}

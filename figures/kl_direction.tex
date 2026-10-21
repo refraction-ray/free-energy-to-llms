@@ -1,0 +1,46 @@
+% Fitting one Gaussian q to a two-mode target p under the two KL directions.
+% Forward KL(p||q) is moment matching: q spans both modes and puts mass in the
+% valley. Reverse KL(q||p) settles on one mode and ignores the other.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+% x in [-5,5] maps to 76mm (7.6mm per unit); density scaled by 45mm per unit.
+\newcommand{\targetp}{0.5*(exp(-(\x+2)^2/0.72)+exp(-(\x-2)^2/0.72))/(0.6*sqrt(2*pi))}
+\newcommand{\drawtarget}{%
+  \fill[FSlate!18] plot[domain=-5:5,samples=241,smooth] (\x*7.6,{45*\targetp}) -- (38,0) -- (-38,0) -- cycle;
+  \draw[FSlate!70,line width=0.6pt] plot[domain=-5:5,samples=241,smooth] (\x*7.6,{45*\targetp});
+  \draw[axis] (-38.5,0) -- (38.5,0);
+  \foreach \t in {-2,0,2} {\draw[FSlate!70,line width=0.4pt] (\t*7.6,0) -- (\t*7.6,-1);
+    \node[lbl,anchor=north] at (\t*7.6,-1.4) {$\t$};}
+}
+\begin{document}
+\begin{tikzpicture}
+  % ---------------------------------------------------------------- forward KL
+  \begin{scope}[shift={(38,0)}]
+    \node[ptitle] at (0,40) {前向 KL：$\min_q \mathrm{KL}(p\Vert q)$};
+    \node[sub] at (0,35.6) {期望在 $p$ 下取，最优 $q$ 匹配 $p$ 的均值与方差};
+    \fill[FOrange!30] plot[domain=-1.27:1.27,samples=41,smooth] (\x*7.6,{45*exp(-(\x)^2/8.72)/(2.088*sqrt(2*pi))}) -- (9.65,0) -- (-9.65,0) -- cycle;
+    \drawtarget
+    \draw[FTeal,line width=1.1pt] plot[domain=-5:5,samples=161,smooth] (\x*7.6,{45*exp(-(\x)^2/8.72)/(2.088*sqrt(2*pi))});
+    \draw[FOrange,line width=0.5pt] (0,4.5) -- (6,21);
+    \node[lblo,anchor=south] at (6,21.2) {两峰之间也放了质量};
+    \node[lblt,anchor=west] at (22,10) {$q$ 横跨两峰};
+  \end{scope}
+  % ---------------------------------------------------------------- reverse KL
+  \begin{scope}[shift={(128,0)}]
+    \node[ptitle] at (0,40) {反向 KL：$\min_q \mathrm{KL}(q\Vert p)$};
+    \node[sub] at (0,35.6) {期望在 $q$ 下取，$q$ 只需落在 $p$ 的高概率区};
+    \drawtarget
+    \draw[FTeal,line width=1.1pt] plot[domain=-5:5,samples=241,smooth] (\x*7.6,{45*exp(-(\x-2)^2/0.72)/(0.6*sqrt(2*pi))});
+    \draw[FRose,densely dashed,line width=0.6pt] (-15.2,10.2) ellipse (11 and 9);
+    \node[lblr,anchor=south] at (-15.2,19.6) {这个模式被丢掉};
+    \node[lblt,anchor=west] at (22,24) {$q$ 落在一个峰上};
+  \end{scope}
+  % ---------------------------------------------------------------- legend
+  \fill[FSlate!18,draw=FSlate!70,line width=0.5pt] (52,-9.2) rectangle (56,-6.8);
+  \node[lbl,anchor=west] at (56.8,-8) {目标 $p$：两个等权高斯};
+  \draw[FTeal,line width=1.1pt] (92,-8) -- (98,-8);
+  \node[lblt,anchor=west] at (98.8,-8) {最优的单个高斯 $q$};
+\end{tikzpicture}
+\end{document}

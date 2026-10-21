@@ -1,0 +1,38 @@
+% Figure: CSA and HCA are two complementary reads of the same history, differing in compression rate and in whether entries are selected.
+% Design width ~168mm, height ~56 mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+
+\node[nteal,minimum width=26mm,minimum height=12mm] (h) at (17,30)
+  {history hidden\\$h_1,\ldots,h_n$};
+\node[nteal,minimum width=34mm,minimum height=11mm] (c1) at (66,48)
+  {CSA compression\\$n\to n/m$};
+\node[norange,minimum width=32mm,minimum height=11mm] (idx) at (106,48)
+  {Lightning Indexer\\Top-$k$};
+\node[nnavy,minimum width=34mm,minimum height=11mm] (core1) at (146,48)
+  {MQA core attention\\$+$ local window};
+\node[norange,minimum width=34mm,minimum height=11mm] (c2) at (66,12)
+  {HCA compression\\$n\to n/m'$};
+\node[norange,minimum width=32mm,minimum height=11mm] (den) at (106,12)
+  {dense core\\attention};
+\node[nnavy,minimum width=34mm,minimum height=11mm] (core2) at (146,12)
+  {MQA $+$ grouped\\output projection};
+\node[nteal,minimum width=26mm,minimum height=11mm] (y) at (146,30)
+  {attention\\output};
+\draw[ar] (h)--(c1);
+\draw[ar] (c1)--(idx);
+\draw[ar] (idx)--(core1);
+\draw[ar] (h)--(c2);
+\draw[ar] (c2)--(den);
+\draw[ar] (den)--(core2);
+\draw[ar] (core1)--(y);
+\draw[ar] (core2)--(y);
+\node[lblt,anchor=south,align=center] at (106,54.4)
+  {few entries, fine resolution};
+\node[lblo,anchor=north,align=center] at (106,5.6)
+  {many entries, coarse resolution};
+\end{tikzpicture}
+\end{document}

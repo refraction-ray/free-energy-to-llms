@@ -1,0 +1,56 @@
+% Cover illustration: observations, a learned multimodal density, and samples.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % Three quiet fields make the visual read as one transformation.
+  \fill[FSky!75] (28,37) circle (21mm);
+  \fill[FMist] (80,37) circle (22mm);
+  \fill[FAmber!62] (132,37) circle (21mm);
+  \draw[arteal,line width=1.1pt] (51,37)--(57,37);
+  \draw[arorange,line width=1.1pt] (103,37)--(109,37);
+
+  % Two clusters of observed data.
+  \foreach \x/\y/\r in {
+    16/44/1.0,19/48/1.25,22/43/1.1,24/49/1.45,27/45/1.1,
+    30/50/1.0,31/42/1.2,35/46/1.0,37/50/1.3,
+    18/28/1.05,21/23/1.3,24/29/1.0,27/25/1.2,30/31/1.0,
+    32/25/1.45,35/29/1.1,39/24/1.0} {
+    \fill[FTeal!90] (\x,\y) circle (\r mm);
+  }
+  \fill[FTeal!40] (13,39) circle (.7mm);
+  \fill[FTeal!40] (40,39) circle (.7mm);
+
+  % The model represents density around both modes rather than one mean.
+  \foreach \a/\b/\opacity in {13/8/35,10/6/50,7/4/75} {
+    \draw[FTeal!\opacity,line width=.75pt,rotate around={-22:(72,44)}]
+      (72,44) ellipse (\a mm and \b mm);
+  }
+  \foreach \a/\b/\opacity in {13/8/35,10/6/50,7/4/75} {
+    \draw[FOrange!\opacity,line width=.75pt,rotate around={23:(89,29)}]
+      (89,29) ellipse (\a mm and \b mm);
+  }
+  \fill[FTeal] (72,44) circle (1.25mm);
+  \fill[FOrange] (89,29) circle (1.25mm);
+
+  % New samples follow the same two-mode geometry with different locations.
+  \foreach \x/\y/\r in {
+    120/45/1.1,123/49/1.0,126/43/1.25,128/48/1.0,131/45/1.45,
+    135/51/1.05,138/44/1.2,142/47/1.0,
+    119/27/1.0,122/23/1.3,125/30/1.0,128/25/1.15,132/28/1.0,
+    135/22/1.4,138/29/1.0,142/25/1.1} {
+    \fill[FOrange!95] (\x,\y) circle (\r mm);
+  }
+  \fill[FOrange!45] (116,39) circle (.7mm);
+  \fill[FOrange!45] (145,36) circle (.7mm);
+
+  \node[font=\sffamily\small,text=FNavy] at (28,7) {概率分布};
+  \node[font=\sffamily\small,text=FNavy] at (80,7) {统计学习};
+  \node[font=\sffamily\small,text=FNavy] at (132,7) {采样与推断};
+  \node[font=\scriptsize,text=FSlate] at (28,0) {what to represent};
+  \node[font=\scriptsize,text=FSlate] at (80,0) {how to fit};
+  \node[font=\scriptsize,text=FSlate] at (132,0) {how to generate};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,67 @@
+% AttnRes: previously produced layer/block outputs are scored by a learned
+% pseudo-query, softmax-weighted into the current layer input, then this layer
+% creates a new output that can be read by later layers.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  \node[ptitle,anchor=west] at (0,95) {Kimi K3 / AttnRes：已有层输出汇成当前层输入};
+  \node[lbln] at (31,84) {同一 token 的已有层块输出 $b_j$};
+  \node[lblo] at (69,84) {当前层的 $w_l$};
+  \node[lblo] at (88,72) {打分 $\to$ softmax};
+
+  % Earlier outputs for one token are retained as separate depth entries.
+  \draw[arteal] (7,15)--(7,68);
+  \node[lbl,rotate=90] at (3,42) {由浅到深};
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{43+mod(11*\d,38)}
+    \filldraw[fill=FOrange!\tone!white,draw=white,line width=.24pt]
+      (60+3*\d,75) rectangle +(3,5.5);
+  }
+  \draw[FOrange,line width=.7pt] (69,74)--(69,17);
+
+  \foreach \y/\lab/\a/\strength in {20/0/0/25,34/1/1/75,48/{l\!-\!1}/{l\!-\!1}/48,62/l/l/62} {
+    \ifnum\y=62
+      \node[mathb,anchor=east] at (17,\y) {$b_l^{\mathrm{part}}$};
+    \else
+      \node[mathb,anchor=east] at (17,\y) {$b_{\lab}$};
+    \fi
+    \foreach \d in {0,...,5} {
+      \pgfmathtruncatemacro{\tone}{38+mod(13*\d+3*\y,42)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.23pt]
+        (20+4*\d,\y-3) rectangle +(4,6);
+    }
+    \draw[arteal] (45,\y)--(64,\y);
+    \node[draw=FOrange,fill=FAmber,circle,minimum size=6mm,inner sep=0pt,
+      font=\scriptsize,text=FOrange] at (69,\y) {$a_{\a}$};
+    \draw[arorange,line width=.72pt] (74,\y)--(102,\y);
+  }
+
+  % The weights are jointly normalized over accessible outputs, then mixed.
+  \draw[FOrange,line width=.7pt] (102,20)--(102,62);
+  \draw[arorange] (102,41)--(109,41);
+  \node[draw=FOrange,fill=FAmber,circle,minimum size=7mm,inner sep=0pt,
+    font=\small,text=FOrange] at (113,41) {$\sum$};
+  \draw[arteal] (117,41)--(124,41);
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{43+mod(7*\d,35)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.24pt]
+      (125+3*\d,38) rectangle +(3,6);
+  }
+  \node[lbln] at (134,52) {第 $l$ 层输入};
+  \node[mathb] at (134,32) {$r_l=\sum_j a_jb_j$};
+
+  \draw[arteal] (144,41)--(150,41);
+  \node[nteal,minimum width=13mm,minimum height=8mm] at (158,41) {$\mathcal F_l$};
+  \draw[arteal] (166,41)--(172,41);
+  \foreach \d in {0,...,5} {
+    \pgfmathtruncatemacro{\tone}{44+mod(9*\d,35)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.24pt]
+      (173+3*\d,38) rectangle +(3,6);
+  }
+  \node[lbln] at (182,52) {第 $l$ 层输出};
+  \node[lbl] at (182,32) {供后续层读取};
+\end{tikzpicture}
+\end{document}

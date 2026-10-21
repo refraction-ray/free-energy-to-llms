@@ -1,0 +1,70 @@
+% DSA: each query head sweeps over the same historical keys; aligned head scores sum by position.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  \node[ptitle,anchor=west] at (0,82) {DeepSeek-V3.2 / DSA：多个 Query 扫同一段历史};
+  % One current token branches into head-specific query vectors and scalar weights.
+  \node[lbln] at (15,75) {当前 token $h_t$};
+  \foreach \i in {0,...,5} {
+    \filldraw[fill=FTeal!51,draw=white,line width=.3pt] (3+4*\i,64) rectangle +(4,6);
+  }
+  \draw[FTeal,line width=.75pt] (8,64)--(8,28);
+  \draw[arorange] (27,67)--(38,61);
+  \draw[FOrange,line width=.75pt] (38,61)--(38,35);
+  % Each historical token owns exactly one compact key; columns remain aligned below.
+  \node[lbln] at (105,75) {历史索引键 $k^I_1,\ldots,k^I_L$};
+  \foreach \s in {0,...,7} {
+    \pgfmathsetmacro{\cx}{73+9*\s}
+    \draw[FTeal!60,rounded corners=.7pt,line width=.5pt] (\cx-4.3,65) rectangle +(8.6,5);
+    \foreach \d in {0,...,3} {
+      \pgfmathtruncatemacro{\tone}{30+mod(\s*9+\d*13,42)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.2pt] (\cx-3.8+1.9*\d,66.5) rectangle +(1.9,2);
+    }
+    \draw[-{Latex[length=1.1mm]},draw=FTeal!55,dashed,line width=.5pt] (\cx,65)--(\cx,24);
+  }
+  \node[eqn,fill=white,inner sep=1pt] at (105,59) {$r_{j,s}=\omega_{t,j}\operatorname{ReLU}(q^I_{t,j}\cdot k^I_s)$};
+  % Three head lanes: vector query and distinct scalar weight feed aligned score traces.
+  \foreach \y/\j in {50/1,40/2,30/3} {
+    \draw[arteal] (8,\y)--(14,\y);
+    \foreach \d in {0,...,3} {
+      \pgfmathtruncatemacro{\tone}{36+mod(\j*15+\d*11,38)}
+      \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt] (16+3.5*\d,\y-2) rectangle +(3.5,4);
+    }
+    \node[font=\small,text=FTeal] at (23,\y-4.5) {$q^I_{t,\j}$};
+    \draw[arorange] (38,\y+5)--(44,\y+5);
+    \node[draw=FOrange,fill=FAmber,circle,minimum size=5mm,inner sep=0pt,font=\scriptsize,text=FOrange] at (47,\y+5) {$\omega_{\j}$};
+    \draw[white,line width=2.2pt] (37.2,\y)--(38.8,\y);
+    \draw[arteal] (30,\y)--(69,\y);
+    \draw[arorange] (50,\y+5)--(54,\y+5)--(54,\y);
+    \fill[FNavy] (54,\y) circle (.65pt);
+    \node[mathb,anchor=west] at (147,\y) {$r_{\j,:}$};
+  }
+  % Nonnegative head contributions, drawn as score traces over the same history axis.
+  \foreach \s/\v in {0/2,1/5,2/1,3/2,4/4,5/1,6/3,7/4} {
+    \fill[FTeal!66] (70+9*\s,47) rectangle +(6,\v);
+  }
+  \foreach \s/\v in {0/1,1/3,2/2,3/2,4/5,5/1,6/2,7/3} {
+    \fill[FTeal!56] (70+9*\s,37) rectangle +(6,\v);
+  }
+  \foreach \s/\v in {0/2,1/4,2/1,3/3,4/2,5/2,6/1,7/5} {
+    \fill[FTeal!46] (70+9*\s,27) rectangle +(6,\v);
+  }
+  % Sum the three aligned head traces for each position, then select peaks in one vector.
+  \node[mathb] at (57,20) {$\sum_j$};
+  \foreach \s/\v/\lab in {0/4/1,1/10/2,2/3/3,3/6/4,4/9/5,5/3/6,6/5/7,7/10/8} {
+    \draw[-{Latex[length=1mm]},draw=FSlate!60,line width=.45pt] (73+9*\s,24)--(73+9*\s,20);
+    \fill[FTeal!45] (70+9*\s,8) rectangle +(6,\v);
+    \node[lbl] at (73+9*\s,4) {\lab};
+  }
+  \foreach \s/\v in {1/10,4/9,7/10} {
+    \fill[FOrange!76] (70+9*\s,8) rectangle +(6,\v);
+  }
+  \node[mathb,anchor=east] at (67,12) {$I_t$};
+  \node[lbl,anchor=south] at (149,20) {Top-$k$};
+  \node[nteal,minimum width=22mm,minimum height=9mm] (mla) at (164,13) {MLA 精读};
+  \draw[arorange] (142,13)--(mla.west);
+\end{tikzpicture}
+\end{document}

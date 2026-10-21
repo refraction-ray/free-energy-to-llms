@@ -1,0 +1,42 @@
+% Figure: maximum likelihood and the variational free energy are one statement
+% read in two coordinate systems.  Design width ~168mm.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+\node[nteal,minimum width=34mm,minimum height=10mm] (data) at (0,9)
+  {discrete data\\$\hat\pi(x)$};
+\node[nsoft,minimum width=34mm,minimum height=10mm] (kl1) at (47,9)
+  {$\mathrm{KL}(\hat\pi\,\Vert\,p_\theta)$\\expectation \emph{under data}};
+\node[norange,minimum width=34mm,minimum height=10mm] (mle) at (94,9)
+  {maximum likelihood\\mean negative log-probability};
+
+\node[nsoft,minimum width=34mm,minimum height=10mm] (energy) at (0,-9)
+  {energy target\\$\pi(x)\propto e^{-\beta E(x)}$};
+\node[nsoft,minimum width=34mm,minimum height=10mm] (kl2) at (47,-9)
+  {$\mathrm{KL}(q_\theta\,\Vert\,\pi)$\\expectation \emph{under model}};
+\node[norange,minimum width=34mm,minimum height=10mm] (free) at (94,-9)
+  {variational free energy\\$\mathbb{E}_q[E]+k_BT\,\mathbb{E}_q[\log q]$};
+
+\draw[arteal] (data)--(kl1);
+\draw[arorange] (kl1)--(mle);
+\draw[arteal] (energy)--(kl2);
+\draw[arorange] (kl2)--(free);
+
+% the two rows differ only in which distribution the expectation is taken over
+\draw[guide] (data.south)--(energy.north);
+\draw[guide] (kl1.south)--(kl2.north);
+\draw[guide] (mle.south)--(free.north);
+
+\node[lbln,anchor=south west] at (-18,17) {learn from data};
+\node[lbln,anchor=north west] at (-18,-17){learn from energy};
+
+\draw[brace] (-19,-16)--(112,-16)
+  node[midway,below=3pt,lbl]
+  {each row minimises its own directed KL};
+
+\node[plain,font=\small,text=FTeal] at (150,0) {optimum\\$p_\theta^*=\hat\pi$\\$q^*=\pi$};
+\draw[arteal,dashed] (112,0)--(135,0);
+\end{tikzpicture}
+\end{document}

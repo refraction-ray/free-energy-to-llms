@@ -1,0 +1,25 @@
+\chapter{公式速查与符号表}
+
+\begin{longtable}{p{36mm} p{100mm}}
+\toprule
+符号 & 含义\\
+\midrule
+\endhead
+\(\pi(x),\ p_\theta(x)\) & 目标或数据分布；由参数 \(\theta\) 定义的生成模型。\\
+\(\E_p[f(x)]\) & 在分布 \(p\) 下对 \(f(x)\) 取期望。\\
+\(\KL(p\Vert q)\) & \(\E_p[\log p(x)-\log q(x)]\)，方向不可交换。\\
+\(z,\ q_\phi(z\mid x)\) & 潜变量；VAE 中由编码器给出的变分后验。\\
+\(E(x),\ Z,\ \beta\) & 能量、配分函数及逆温；\(p(x)=e^{-\beta E(x)}/Z\)。\\
+\(F[q]\) & 变分自由能，\(F[q]=\E_q[E]-T S[q]\)。\\
+\(\bar\alpha_t,\ a_t,\ b_t\) & 扩散过程中累计保留的信号比例；\(a_t=\sqrt{\bar\alpha_t}\)、\(b_t=\sqrt{1-\bar\alpha_t}\) 为累计信号与噪声幅度。\\
+\(\epsilon_\theta(x_t,t)\) & 模型预测的累计噪声。\\
+\(\nabla_x\log p_t(x)\) & score，即时刻 \(t\) 对数密度对 \(x\) 的梯度。\\
+\(T\) & 在序列模型中为序列长度，在扩散模型中为总步数；温度也常记为 \(T\)，由 \(\beta=1/(k_{\mathrm B}T)\) 区分。\\
+\(\tau,\ \mathcal V\) & token 采样温度；词表。\\
+\(Q,K,V\) & 注意力中的查询、键和值矩阵。\\
+\(L,\ n_{kv},\ d_h\) & Transformer 层数、KV head 数、每个 head 的维度。\\
+\(c_t^{KV}\) & MLA 为位置 \(t\) 缓存的低维内容摘要。\\
+\(S_t\) & 线性注意力或 KDA 汇总历史信息的矩阵状态。\\
+\(D\) & MPS 相邻张量间的键维；增大它通常提高表达能力和收缩成本。\\
+\bottomrule
+\end{longtable}

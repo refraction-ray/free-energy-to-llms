@@ -1,0 +1,43 @@
+% VAE: networks output conditional-distribution parameters; an observation is
+% scored during training and sampled from the decoder distribution at generation.
+\documentclass[border=0pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+\node[lblr,anchor=west] at (38,62.5) {encoder: infer $z$ from observed $x$};
+\node[lbl,anchor=west] at (110,63.5) {$\epsilon\sim\mathcal N(0,I)$};
+\draw[arorange,dashed] (110,61.9) -- (110,58.2);
+\node[plain,anchor=west,font=\small\bfseries,text=FNavy] at (0,56) {TRAIN};
+\node[nsoft,minimum width=22mm] (data) at (40,54) {observed $x$};
+\node[nteal,minimum width=32mm] (enc) at (74,54) {encoder $q_\phi(z\mid x)$\\$\mu_\phi(x),\ \log\sigma_\phi^2(x)$};
+\node[norange,minimum width=32mm] (rep) at (110,54) {reparameterise\\$z=\mu_\phi(x)+\sigma_\phi(x)\odot\epsilon$};
+\node[nteal,minimum width=30mm] (dec) at (146,54) {decoder\\params of $p_\theta(x\mid z)$};
+\draw[arteal] (data)--(enc);
+\draw[arteal] (enc)--(rep);
+\draw[arteal] (rep)--(dec);
+\node[lbl,anchor=north west] at (48,49.2) {one pass};
+\node[nsoft,minimum width=34mm] (prior) at (74,40) {prior $p(z)=\mathcal N(0,I)$};
+\draw[arteal,{Latex[length=1.5mm]}-{Latex[length=1.5mm]}] (enc.south) -- (prior.north);
+\node[lblt,anchor=west] at (95,46) {$\mathrm{KL}(q_\phi(z\mid x)\,\Vert\,p(z))$};
+\node[lbl,anchor=west] at (95,43.2) {tractable regulariser};
+\node[norange,minimum width=140mm,minimum height=10mm,font=\scriptsize] (elbo) at (86,28)
+  {$\mathcal L_{\mathrm{ELBO}}=\underbrace{\mathbb{E}_{q_\phi(z\mid x)}[\log p_\theta(x\mid z)]}_{\text{reconstruction term}}-\underbrace{\mathrm{KL}(q_\phi(z\mid x)\,\Vert\,p(z))}_{\text{KL regulariser}}$};
+\draw[arorange,dashed] (prior.south) -- (74,33.4);
+\draw[arorange,dashed] (dec.south) -- (146,33.4);
+\node[lblo,anchor=east] at (142,38.5) {score observed $x$};
+\draw[arorange,dashed] (2,28) -- (16,28);
+\draw[arorange,dashed] (2,28) -- (2,53.6);
+\draw[arorange,dashed] (2,53.6) -- (28.6,53.6);
+\node[lblo,anchor=west] at (24,42) {gradients flow back\\through $\epsilon$\\to $\phi,\theta$};
+\draw[guide] (0,19) -- (168,19);
+\node[plain,anchor=west,font=\small\bfseries,text=FNavy] at (0,13.5) {GENERATE};
+\node[lblr,anchor=west] at (0,8.5) {encoder unused};
+\node[nteal,minimum width=34mm] (z) at (74,11.5) {$z\sim p(z)=\mathcal N(0,I)$};
+\node[nteal,minimum width=46mm] (dec2) at (144,11.5) {decoder: params of $p_\theta(x\mid z)$\\then sample $x\sim p_\theta(\cdot\mid z)$};
+\draw[arteal] (z)--(dec2) node[midway,above=0.6mm,lblo] {one forward pass};
+\node[draw=FSlate!35,fill=FMist,rounded corners=2pt,inner sep=2pt,align=center] at (86,1)
+  {$\log p_\theta(x)=\mathcal L_{\mathrm{ELBO}}(x)+\textcolor{FRose}{\mathrm{KL}(q_\phi(z\mid x)\,\Vert\,p_\theta(z\mid x))}$\\[0.4mm]
+   {\fontsize{6}{7}\selectfont\color{FSlate}the gap is a $\mathrm{KL}\geq0$, so the ELBO never exceeds $\log p_\theta(x)$}};
+\end{tikzpicture}
+\end{document}

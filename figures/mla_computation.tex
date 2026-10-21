@@ -1,0 +1,53 @@
+% MLA content path: one short latent is cached per historical token, then reused
+% to reconstruct the content keys and values needed by every attention head.
+\documentclass[border=2mm]{standalone}
+\usepackage{amsmath,amssymb}
+\input{cjk.tex}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+  \node[ptitle,anchor=west] at (0,70) {DeepSeek-V2 / MLA：一份短缓存，还原多头 $K/V$};
+
+  % One representative historical token. The short latent is the stored item.
+  \node[lbln] at (23,51) {每个历史 token};
+  \foreach \d in {0,...,9} {
+    \pgfmathtruncatemacro{\tone}{38+mod(7*\d,40)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.25pt]
+      (10+2.6*\d,32) rectangle +(2.6,8);
+  }
+  \node[mathb] at (23,26.8) {$h_s$};
+  \draw[arteal] (38,36)--(57,36);
+  \node[lblt] at (47,41.5) {压缩};
+
+  \draw[draw=FTeal!70,fill=FSky!55,rounded corners=1.2pt,line width=.65pt]
+    (60,26) rectangle (84,47);
+  \node[lbln] at (72,43) {KV 缓存};
+  \foreach \d in {0,...,3} {
+    \pgfmathtruncatemacro{\tone}{52+mod(13*\d,33)}
+    \filldraw[fill=FTeal!\tone!white,draw=white,line width=.28pt]
+      (65+3.5*\d,33) rectangle +(3.5,6);
+  }
+  \node[mathb] at (72,29) {$c_s^{KV}$};
+
+  % The same cached latent fans out to head-specific content keys and values.
+  \node[lbln] at (119,64) {读取时按 head 展开};
+  \draw[arteal] (84,36)--(98,36);
+  \draw[FTeal,line width=.8pt] (98,16)--(98,54);
+  \foreach \y/\j in {52/1,35/2,18/3} {
+    \draw[arteal] (98,\y)--(108,\y);
+    \fill[FTeal] (108,\y) circle (.7pt);
+    \draw[arteal] (108,\y) to[out=25,in=180] (116,\y+4);
+    \draw[arteal] (108,\y) to[out=-25,in=180] (116,\y-4);
+    \foreach \d in {0,...,5} {
+      \pgfmathtruncatemacro{\ktone}{36+mod(\j*11+\d*8,45)}
+      \pgfmathtruncatemacro{\vtone}{40+mod(\j*13+\d*6,40)}
+      \filldraw[fill=FTeal!\ktone!white,draw=white,line width=.22pt]
+        (117+3*\d,\y+1.7) rectangle +(3,4.6);
+      \filldraw[fill=FTeal!\vtone!white,draw=white,line width=.22pt]
+        (117+3*\d,\y-6.3) rectangle +(3,4.6);
+    }
+    \node[mathb,anchor=west] at (138,\y+4) {$K_{s,\j}$};
+    \node[mathb,anchor=west] at (138,\y-4) {$V_{s,\j}$};
+  }
+\end{tikzpicture}
+\end{document}

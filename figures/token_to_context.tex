@@ -1,0 +1,27 @@
+% Token IDs receive fixed lookup vectors; Transformer layers turn them into contextual vectors.
+\documentclass[border=2pt]{standalone}
+\usepackage{amsmath,amssymb}
+\input{figstyle.sty}
+\begin{document}
+\begin{tikzpicture}
+\node[nsoft,minimum width=20mm,font=\scriptsize] (raw) at (11,53) {raw text};
+\node[nnavy,minimum width=20mm,font=\scriptsize] (tok) at (39,53) {tokenizer};
+\node[nsoft,minimum width=20mm,font=\scriptsize] (ids) at (67,53) {token IDs};
+\node[nteal,minimum width=24mm,font=\scriptsize] (emb) at (97,53) {lookup $E$\\+ positions};
+\node[nnavy,minimum width=24mm,font=\scriptsize] (tr) at (128,53) {Transformer\\layers};
+\node[nteal,minimum width=20mm,font=\scriptsize] (ctx) at (157,53) {contextual\\$h_t$};
+\draw[ar] (raw)--(tok);\draw[ar] (tok)--(ids);\draw[arteal] (ids)--(emb);\draw[arteal] (emb)--(tr);\draw[arteal] (tr)--(ctx);
+\node[norange,minimum width=20mm,font=\scriptsize] (head) at (157,40) {output head};
+\draw[arorange] (ctx)--(head);
+\node[lbl,anchor=west] at (1,39) {same token, two contexts};
+\node[nsoft,minimum width=39mm,font=\scriptsize] (s1) at (21,27) {the river \textbf{bank}};
+\node[nsoft,minimum width=39mm,font=\scriptsize] (s2) at (21,12) {a local \textbf{bank}};
+\node[nteal,minimum width=25mm,font=\scriptsize] (e1) at (79,27) {$E[\mathrm{bank}]$};
+\node[nteal,minimum width=25mm,font=\scriptsize] (e2) at (79,12) {$E[\mathrm{bank}]$};
+\node[nteal,minimum width=45mm,font=\scriptsize] (h1) at (133,27) {$h_{\mathrm{bank}}$: river shore};
+\node[nteal,minimum width=45mm,font=\scriptsize] (h2) at (133,12) {$h_{\mathrm{bank}}$: finance};
+\draw[ar] (s1)--(e1);\draw[ar] (s2)--(e2);\draw[arteal] (e1)--(h1);\draw[arteal] (e2)--(h2);
+\node[lblt] at (79,19.5) {word2vec: same vector};
+\node[lbln] at (133,19.5) {Transformer: different vectors};
+\end{tikzpicture}
+\end{document}
