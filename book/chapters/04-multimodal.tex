@@ -15,9 +15,9 @@
  u_i=W_{\mathrm{patch}}\operatorname{vec}(\operatorname{patch}_i)+b_{\mathrm{patch}},
  \qquad U_0=[u_{\mathrm{CLS}},u_1,\ldots,u_N]+P_{\mathrm{pos}}.
 \end{equation}
-其中 \(P_{\mathrm{pos}}\) 为位置向量。然后 \(U_0\) 进入普通 Transformer encoder。与语言 decoder 不同，ViT 使用双向 self-attention：每个 patch 可以读取所有其他 patch；CLS token 的输出或所有 patch 的池化结果作为整幅图像的表示。训练目标可以是图像分类交叉熵，也可以是下一节的图文对比损失。
+其中 \(P_{\mathrm{pos}}\) 为位置向量。然后 \(U_0\) 进入普通 Transformer encoder。与语言 decoder 不同，ViT 使用双向自注意力：每个 patch 可以读取所有其他 patch；CLS token 的输出或所有 patch 的池化结果作为整幅图像的表示。训练目标可以是图像分类交叉熵，也可以是下一节的图文对比损失。
 
-\textbf{分辨率与 token 数。}patch 数 \(N=HW/P^2\) 随分辨率平方增长，self-attention 的计算和激活显存又随 \(N^2\) 增长。例如 \(P=14\) 时，\(336\times336\) 的图像给出 \(24\times24=576\) 个 patch，\(672\times672\) 的图像给出 2304 个。实际系统用两类办法控制 token 数。一是按图像的实际分辨率和长宽比决定 patch 网格，或把大图切成若干块分别编码，再附一张缩小的全图提供整体布局，避免统一缩放丢掉细节。二是在编码之后合并相邻 patch：把 \(2\times2\) 个相邻 patch 的特征拼成一个 \(4d_v\) 维向量，再用 MLP 投影回所需维度，token 数降为四分之一。合并保留了局部内容，只是每个 token 覆盖的面积变大；空间分辨率与 token 预算之间的取舍并没有消失。
+\textbf{分辨率与 token 数。}patch 数 \(N=HW/P^2\) 随分辨率平方增长，自注意力的计算和激活显存又随 \(N^2\) 增长。例如 \(P=14\) 时，\(336\times336\) 的图像给出 \(24\times24=576\) 个 patch，\(672\times672\) 的图像给出 2304 个。实际系统用两类办法控制 token 数。一是按图像的实际分辨率和长宽比决定 patch 网格，或把大图切成若干块分别编码，再附一张缩小的全图提供整体布局，避免统一缩放丢掉细节。二是在编码之后合并相邻 patch：把 \(2\times2\) 个相邻 patch 的特征拼成一个 \(4d_v\) 维向量，再用 MLP 投影回所需维度，token 数降为四分之一。合并保留了局部内容，只是每个 token 覆盖的面积变大；空间分辨率与 token 预算之间的取舍并没有消失。
 
 \textbf{二维与时空位置。}语言序列只有一个位置下标，图像 patch 有行、列两个下标，视频 patch 还有帧号。第 \ref{sec:rope} 节的 RoPE 可以推广到多个下标。先把它的旋转矩阵写成分块形式：把每个 head 的 \(d\) 维 query 和 key 按相邻两维分成 \(d/2\) 个维度对，第 \(j\) 对记为 \(q^{(j)}=(q_{2j+1},q_{2j+2})\in\R^2\)（\(k^{(j)}\) 同理），配一个固定频率 \(\theta_j=b^{-2j/d}\)，常取 \(b=10^4\)。位置 \(m\) 处的旋转是块对角矩阵
 \begin{equation}
@@ -72,12 +72,12 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
 
 \textbf{视频。}视频多了时间轴。把相邻 \(P_t\) 帧中同一位置的 \(P\times P\) 区域合成一个时空 patch，token 数为 \(N=(T/P_t)(H/P)(W/P)\)，\(P_t=1\) 时就是逐帧编码。帧数增加时 token 数线性增长，注意力代价按平方增长，因此视频理解通常先降低帧率或合并 token。
 
-\textbf{音频。}音频的原始形式是一维波形 \(x[n]\)，采样率 24 kHz 时每秒有 24000 个采样值，直接当作 token 序列太长。常见的压缩表示有两种，见图 \ref{fig:audio-representations}：对数梅尔频谱是固定的信号变换，多用于语音识别等理解任务；神经音频编解码器是训练出来的表示，量化后成为离散 token，多用于生成。这只是常见用法，不是严格的分工。
+\textbf{音频。}音频的原始形式是一维波形 \(x[n]\)，采样率 24 kHz 时每秒有 24000 个采样值，直接当作 token 序列太长。常见的压缩表示有两种，见图 \ref{fig:audio-representations}：对数梅尔频谱是固定的信号变换，多用于语音识别等理解任务；神经音频编解码器是训练出来的表示，量化后成为离散 token，多用于生成。
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{audio_representations.pdf}
-\caption{音频的两种表示。左：对数梅尔频谱，横轴为帧，纵轴为梅尔频带；可以切二维 patch（橙框），也可以逐帧读出 \(B\) 维列向量（深蓝框）。中：编解码器每 \(\ell\) 个采样点输出一个潜在向量 \(z_\tau\)，RVQ 把它变成 \(S\) 个编号，整段音频成为 \(S\times T\) 的整数网格。右：第一级选出离 \(z\) 最近的 \(e^{(1)}\)，第二级选出离残差 \(r^{(1)}=z-e^{(1)}\) 最近的 \(e^{(2)}\)，两者之和 \(\hat z\) 已接近 \(z\)。}
+\caption{音频的两种表示。左：对数梅尔频谱，横轴为帧，纵轴为梅尔频带；可以切二维 patch（橙框），也可以逐帧读出 \(B\) 维列向量（深蓝框）。中：编解码器每 \(\ell\) 个采样点输出一个潜在向量 \(z_\tau\)，残差向量量化把它变成 \(S\) 个编号，整段音频成为 \(S\times T\) 的整数网格。右：第一级选出离 \(z\) 最近的 \(e^{(1)}\)，第二级选出离残差 \(r^{(1)}=z-e^{(1)}\) 最近的 \(e^{(2)}\)，两者之和 \(\hat z\) 已接近 \(z\)。}
 \label{fig:audio-representations}
 \end{figure}
 
@@ -98,9 +98,9 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
  \hat z_\tau=\sum_{s=1}^{S}e^{(s)}_{k^{(s)}_\tau}.
  \label{eq:rvq}
 \end{equation}
-图 \ref{fig:audio-representations} 右侧是二维示意：\(z=(1.8,1.2)\)，第一级选中 \((1,1)\)，残差 \((0.8,0.2)\)；第二级选中 \((0.75,0.25)\)，残差缩小为 \((0.05,-0.05)\)。每一级本身就是第 \ref{sec:vector-quantized-latents} 节的 VQ。每帧由 \(S\) 个编号表示，共 \(S\log_2M\) 比特；EnCodec 每秒 75 帧，取 \(S=8\) 时码率为 6 kbps。整段音频因此是 \(S\times T\) 的编号网格，按帧展开成序列时长度为 \(ST\)。
+图 \ref{fig:audio-representations} 右侧是二维示意：\(z=(1.8,1.2)\)，第一级选中 \((1,1)\)，残差 \((0.8,0.2)\)；第二级选中 \((0.75,0.25)\)，残差缩小为 \((0.05,-0.05)\)。每一级本身就是第 \ref{sec:vector-quantized-latents} 节的向量量化（Vector Quantization，VQ）。每帧由 \(S\) 个编号表示，共 \(S\log_2M\) 比特；EnCodec 每秒 75 帧，取 \(S=8\) 时码率为 6 kbps。整段音频因此是 \(S\times T\) 的编号网格，按帧展开成序列时长度为 \(ST\)。
 
-\textbf{理解用的表示与生成用的表示。}按训练目标，视觉 token 化可以分成两类，见表 \ref{tab:visual-tokenizers}。ViT 或 CLIP 图像编码器用分类或图文对比损失训练，只需保留区分语义所需的信息，没有解码器，输出不能还原成像素；它们是语言模型读取图像的入口。自编码器类 tokenizer，即第 \ref{sec:vector-quantized-latents} 节的 VQ-VAE 和潜空间扩散使用的自编码器，用重建损失训练，必须保留纹理和细节，并配有解码器；它们是生成模型工作的空间。前者擅长回答“图中是什么”，后者能把图画出来。同一套表示很难同时做好这两件事，这是第 \ref{sec:unified-multimodal} 节统一模型的核心难点。重建型 tokenizer 按输出形式又分两种。潜空间扩散的自编码器沿用第 \ref{chap:model-families} 章 VAE 的编码器—解码器结构，文献中通常直接称为 VAE；它输出连续向量网格，扩散直接在这些向量上进行。VQ-VAE 一类在同样的编码器之后再多一步量化，下文简称 VQ tokenizer：编码器把图像压成一个较小的向量网格，每个向量替换成码本中最近的码字，图像就变成一个整数编号网格，例如 \(512\times512\) 的图像变成 \(32\times32\) 个编号，可以像文本 token 一样排成序列做下一 token 预测；配套的解码器把编号网格还原成图像。
+\textbf{理解用的表示与生成用的表示。}按训练目标，视觉 token 化可以分成两类，见表 \ref{tab:visual-tokenizers}。ViT 或图文对比预训练（Contrastive Language--Image Pre-training，CLIP）的图像编码器用分类或图文对比损失训练，只需保留区分语义所需的信息，没有解码器，输出不能还原成像素；它们是语言模型读取图像的入口。自编码器类 tokenizer，即第 \ref{sec:vector-quantized-latents} 节的 VQ-VAE 和潜空间扩散使用的自编码器，用重建损失训练，必须保留纹理和细节，并配有解码器；它们是生成模型工作的空间。前者擅长回答“图中是什么”，后者能把图画出来。同一套表示很难同时做好这两件事，这是第 \ref{sec:unified-multimodal} 节统一模型的核心难点。重建型 tokenizer 按输出形式又分两种。潜空间扩散的自编码器沿用第 \ref{chap:model-families} 章 VAE 的编码器—解码器结构，文献中通常直接称为 VAE；它输出连续向量网格，扩散直接在这些向量上进行。VQ-VAE 一类在同样的编码器之后再多一步量化，下文简称 VQ tokenizer：编码器把图像压成一个较小的向量网格，每个向量替换成码本中最近的码字，图像就变成一个整数编号网格，例如 \(512\times512\) 的图像变成 \(32\times32\) 个编号，可以像文本 token 一样排成序列做下一 token 预测；配套的解码器把编号网格还原成图像。
 
 \begin{table}[ht]
 \centering\small
@@ -112,7 +112,7 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
 输出 & 连续的 patch 向量 & 连续潜变量网格或离散码字网格\\
 能否还原像素 & 不能，没有解码器 & 能，由解码器还原\\
 保留的信息 & 与类别、文本描述相关的语义 & 纹理、边缘、颜色等局部细节\\
-主要用途 & VLM 的视觉输入、检索、零样本分类 & 潜空间扩散、自回归图像生成\\
+主要用途 & 视觉语言模型的视觉输入、检索、零样本分类 & 潜空间扩散、自回归图像生成\\
 典型例子 & ViT、CLIP 图像编码器（第 \ref{sec:clip} 节） &潜空间扩散的自编码器、VQ-VAE\\
 \bottomrule
 \end{tabularx}
@@ -123,7 +123,7 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
 \section{图文对比学习：对齐优化了什么}
 \label{sec:clip}
 
-图像向量和文本向量各自可用，但默认不在同一个语义空间。图文对比预训练（Contrastive Language--Image Pre-training，CLIP）通过让配对图文接近、非配对图文分开，建立可比较的表示；它使用一个 image encoder \(f_I\) 和一个 text encoder \(f_T\)，分别把图像 \(I_i\) 和配对文本 \(S_i\) 映射到同一个 \(d_c\) 维空间~\cite{radford2021clip}：
+图像向量和文本向量各自可用，但默认不在同一个语义空间。CLIP 通过让配对图文接近、非配对图文分开，建立可比较的表示；它使用一个 image encoder \(f_I\) 和一个 text encoder \(f_T\)，分别把图像 \(I_i\) 和配对文本 \(S_i\) 映射到同一个 \(d_c\) 维空间~\cite{radford2021clip}：
 \begin{equation}
  u_i=\frac{f_I(I_i)}{\|f_I(I_i)\|_2},\qquad
  v_i=\frac{f_T(S_i)}{\|f_T(S_i)\|_2},\qquad
@@ -227,7 +227,7 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
  \mathcal L_{\mathrm{sig}}=-\frac1B\sum_{i,j}\log\sigma\bigl(z_{ij}(t\,u_i^\mathsf T v_j+b)\bigr),\qquad
  z_{ij}=\begin{cases}+1,&i=j,\\-1,&i\neq j,\end{cases}
 \end{equation}
-其中 \(t\) 是可学习的尺度，\(b\) 是可学习的偏置。它不对整行做 softmax，因而没有配分函数，相似度矩阵可以分块计算，对 batch 大小的依赖也比 softmax 版本小。逻辑回归的最优 logit 同样是逐点互信息，再加上正负样本先验比的对数；一个 batch 中正负样本之比约为 \(1:(B-1)\)，这部分由偏置 \(b\) 吸收，所以 \(b\) 通常初始化为较大的负值。两种损失学到的都是全局相似度接口，都不会自动得到 patch 与词语之间的精确对应。用这种损失训练出的图像编码器通常也直接叫 SigLIP 编码器；它和 CLIP 图像编码器一样是语义编码器，输出 patch 向量，是当前许多 VLM 的视觉部分。
+其中 \(t\) 是可学习的尺度，\(b\) 是可学习的偏置。它不对整行做 softmax，因而没有配分函数，相似度矩阵可以分块计算，对 batch 大小的依赖也比 softmax 版本小。逻辑回归的最优 logit 同样是逐点互信息，再加上正负样本先验比的对数；一个 batch 中正负样本之比约为 \(1:(B-1)\)，这部分由偏置 \(b\) 吸收，所以 \(b\) 通常初始化为较大的负值。两种损失学到的都是全局相似度接口，都不会自动得到 patch 与词语之间的精确对应。用这种损失训练出的图像编码器通常也直接叫 SigLIP 编码器；它和 CLIP 图像编码器一样是语义编码器，输出 patch 向量，是当前许多视觉语言模型的视觉部分。
 
 \section{视觉语言模型：把视觉 token 接进语言模型}
 \label{sec:vlm}
@@ -248,20 +248,20 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
 \log p_\theta(y_{1:T}\mid v_{1:K},c)
 =\sum_t\log p_\theta(y_t\mid y_{<t},v_{1:K},c),
 \end{equation}
-其中 \(c\) 是文本提示，\(y\) 是要生成的回答。损失的形式与语言模型相同，学到什么取决于数据，以及哪些部分参与更新。图 \ref{fig:vlm-architecture}(c) 是以 LLaVA 为代表的两阶段流程。第一阶段只训练连接器，视觉编码器和语言模型都冻结，数据是图像和它的描述。这一步相当于为连接器编一本词典，让映射后的视觉向量落在语言模型读得懂的位置。语言模型此时要冻结，因为刚初始化的连接器输出的是噪声，若语言模型跟着更新，已有的语言能力会受损。第二阶段做视觉指令微调，数据是“图像 + 问题 + 回答”，连接器和语言模型一起训练，损失只算在回答 token 上，与第 \ref{chap:training-methods} 章的 SFT 相同。
+其中 \(c\) 是文本提示，\(y\) 是要生成的回答。损失的形式与语言模型相同，学到什么取决于数据，以及哪些部分参与更新。图 \ref{fig:vlm-architecture}(c) 是以 LLaVA 为代表的两阶段流程。第一阶段只训练连接器，视觉编码器和语言模型都冻结，数据是图像和它的描述。这一步相当于为连接器编一本词典，让映射后的视觉向量落在语言模型读得懂的位置。语言模型此时要冻结，因为刚初始化的连接器输出的是噪声，若语言模型跟着更新，已有的语言能力会受损。第二阶段做视觉指令微调，数据是“图像 + 问题 + 回答”，连接器和语言模型一起训练，损失只算在回答 token 上，与第 \ref{chap:training-methods} 章的监督微调（Supervised Fine-Tuning，SFT）相同。
 
 \section{条件图像与视频生成}
 \label{sec:conditional-generation}
 
-生成方向把上一节的信息流倒过来：输入文字，输出像素。第二章已经给出了所需的生成算法：潜空间扩散和两种去噪网络（第 \ref{sec:diffusion-score} 节和图 \ref{fig:diffusion-denoiser}）、无分类器引导（式 \eqref{eq:cfg}），以及用 VQ-VAE 码字做自回归生成（第 \ref{sec:vector-quantized-latents} 节）。这一节不重复这些算法，只讨论多模态场景下新增的问题：在哪个表示空间生成，文本条件怎样编码，条件从哪里进入网络，以及视频带来的额外成本。
+生成方向把上一节的信息流倒过来：输入文字，输出像素。第 \ref{chap:model-families} 章已经给出了所需的生成算法：潜空间扩散和两种去噪网络（第 \ref{sec:diffusion-score} 节和图 \ref{fig:diffusion-denoiser}）、无分类器引导（式 \eqref{eq:cfg}），以及用 VQ-VAE 码字做自回归生成（第 \ref{sec:vector-quantized-latents} 节）。这一节不重复这些算法，只讨论多模态场景下新增的问题：在哪个表示空间生成，文本条件怎样编码，条件从哪里进入网络，以及视频带来的额外成本。
 
 \textbf{在哪个空间生成。}在像素空间生成，每一步都要处理整幅图像。潜空间扩散先用表 \ref{tab:visual-tokenizers} 中的重建型自编码器把图像压成小得多的潜变量，例如 \(512\times512\times3\) 压成 \(64\times64\times4\)，去噪网络只在潜空间工作，细节由解码器补回~\cite{rombach2022ldm}。压缩率越高，生成越便宜，但解码器的重建质量成了整个系统的上限：自编码器还原不出的小字或细纹理，生成模型也画不出来。这也是这类自编码器要加感知损失和对抗损失的原因：只用像素均方误差训练时，解码器会对一组同样合理的细节取平均，重建就发糊~\cite{esser2021vqgan}。
 
 \textbf{离散 token 的生成顺序。}若 tokenizer 输出离散码字，图像生成就成了序列生成。按光栅顺序逐个预测码字，可以直接复用语言模型，但一张 \(32\times32\) 的码字网格需要 1024 次串行调用，而且左上角生成时看不到右下角。MaskGIT 改为并行生成：从全部遮住开始，每一轮预测所有被遮住的位置，保留最有把握的一部分，其余重新遮住，约 8 轮即可完成~\cite{chang2022maskgit}。这就是第 \ref{sec:discrete-diffusion} 节的离散掩码扩散。
 
-\textbf{文本条件怎样编码。}文本先经过一个通常冻结的文本编码器，得到一串 token 向量。早期的潜空间扩散使用 CLIP 文本编码器。Imagen 改用只在文本上预训练的 T5 编码器，发现增大文本编码器比增大扩散网络更能提高图文一致性~\cite{saharia2022imagen}。第 \ref{sec:clip} 节的互信息分析给出了解释：CLIP 文本编码器只被训练去保留有助于全局匹配的信息，对词序、数量和属性归属不敏感，比如分不清“红色的方块和蓝色的球”中哪个颜色属于哪个物体；在大量文本上训练的语言模型保留了更多句法结构。所以许多模型同时使用两类编码器~\cite{esser2024sd3}。
+\textbf{文本条件怎样编码。}文本先经过一个通常冻结的文本编码器，得到一串 token 向量。早期的潜空间扩散使用 CLIP 文本编码器。Imagen 改用只在文本上预训练的 T5（Text-to-Text Transfer Transformer）编码器，发现增大文本编码器比增大扩散网络更能提高图文一致性~\cite{saharia2022imagen}。第 \ref{sec:clip} 节的互信息分析给出了解释：CLIP 文本编码器只被训练去保留有助于全局匹配的信息，对词序、数量和属性归属不敏感，比如分不清“红色的方块和蓝色的球”中哪个颜色属于哪个物体；在大量文本上训练的语言模型保留了更多句法结构。所以许多模型同时使用两类编码器~\cite{esser2024sd3}。
 
-\textbf{条件从哪里进入网络。}文本 token 向量进入去噪网络有三种方式，前两种与上一节 VLM 的两种读取方式相同。交叉注意力让图像位置作 query、文本 token 作 key 和 value，U-Net 类去噪网络这样做（图 \ref{fig:diffusion-denoiser}）。序列拼接把文本 token 和图像 patch token 拼成一条序列做联合注意力，SD3 这样做~\cite{esser2024sd3}。归一化调制把时间步、类别等条件压成一个向量，由它生成每层归一化的缩放和平移参数，DiT 用它注入时间步和类别标签~\cite{peebles2023dit}。前两种方式让每个图像位置都能读取每个文本 token，适合表达“左边红色、右边蓝色”这类逐位置的描述；调制对整幅图像施加同一组参数，只能表达全局属性，但最便宜。表 \ref{tab:condition-interfaces} 把理解与生成两个方向的注入方式放在一起比较。
+\textbf{条件从哪里进入网络。}文本 token 向量进入去噪网络有三种方式，前两种与上一节 VLM 的两种读取方式相同。交叉注意力让图像位置作 query、文本 token 作 key 和 value，U-Net 类去噪网络这样做（图 \ref{fig:diffusion-denoiser}）。序列拼接把文本 token 和图像 patch token 拼成一条序列做联合注意力，Stable Diffusion 3（SD3）这样做~\cite{esser2024sd3}。归一化调制把时间步、类别等条件压成一个向量，由它生成每层归一化的缩放和平移参数，DiT 用它注入时间步和类别标签~\cite{peebles2023dit}。前两种方式让每个图像位置都能读取每个文本 token，适合表达“左边红色、右边蓝色”这类逐位置的描述；调制对整幅图像施加同一组参数，只能表达全局属性，但最便宜。表 \ref{tab:condition-interfaces} 把理解与生成两个方向的注入方式放在一起比较。
 
 \textbf{空间条件与编辑。}深度图、边缘图、人体姿态这类条件与图像处在同一空间网格上，可以逐位置对应，最简单的做法是把它们缩放到潜变量的分辨率，与带噪潜变量按通道拼接作为输入。修复就是这样做的：把掩码和保留区域拼进输入，模型只生成掩码内的内容。ControlNet 则不改动原网络：冻结预训练的去噪网络，复制一份可训练的分支读取条件图，分支的输出经初始化为零的卷积加回原网络~\cite{zhang2023controlnet}。训练开始时输出与原模型完全相同，这与 Flamingo 的零初始化门控是同一个思路：新加的条件通路从不起作用开始学，不破坏预训练得到的能力。
 
@@ -352,6 +352,6 @@ logit 的“三段”来自式 \eqref{eq:rope-pairs} 的求和。那里的 \(d/2
 \label{fig:unified-routes}
 \end{figure}
 
-Chameleon 对两个问题都选统一：图像用 VQ 码字表示并入文本词表，读写都是下一 token 预测~\cite{chameleon2024}。图像从第一层起就与文字共享全部参数，没有独立的视觉编码器，这就是“早期融合”。代价是理解只能依赖语义较弱的重建型码字；图像 token 与文本 token 的统计性质差别也大，训练要靠 QK-Norm（第 \ref{sec:qk-norm} 节）等手段维持稳定。Janus 在第一个问题上分开：读图用 SigLIP 编码器（第 \ref{sec:clip} 节），画图仍预测 VQ 码字，代价是同一张图在模型中有两种表示~\cite{wu2024janus}。Transfusion 在第二个问题上改用扩散：图像以不量化的 VAE 潜变量进出网络，文本用下一 token 损失，图像用去噪损失；同一张图内部的 patch 互相可见，因为扩散一次去噪整幅图像~\cite{zhou2024transfusion}。它避开了量化损失，代价是推理时要在逐 token 解码与多步去噪之间切换。
+Chameleon 对两个问题都选统一：图像用 VQ 码字表示并入文本词表，读写都是下一 token 预测~\cite{chameleon2024}。图像从第一层起就与文字共享全部参数，没有独立的视觉编码器，这就是“早期融合”。代价是理解只能依赖语义较弱的重建型码字；图像 token 与文本 token 的统计性质差别也大，训练要靠查询与键归一化（Query--Key Normalization，QK-Norm；见第 \ref{sec:qk-norm} 节）等手段维持稳定。Janus 在第一个问题上分开：读图用 SigLIP 编码器（第 \ref{sec:clip} 节），画图仍预测 VQ 码字，代价是同一张图在模型中有两种表示~\cite{wu2024janus}。Transfusion 在第二个问题上改用扩散：图像以不量化的 VAE 潜变量进出网络，文本用下一 token 损失，图像用去噪损失；同一张图内部的 patch 互相可见，因为扩散一次去噪整幅图像~\cite{zhou2024transfusion}。它避开了量化损失，代价是推理时要在逐 token 解码与多步去噪之间切换。
 
-GPT-4o 把同样的思路推广到语音：OpenAI 称它在文本、图像和音频上端到端训练，具体结构没有公开~\cite{openai2024gpt4o}。与“语音识别、语言模型、语音合成”三段级联的系统相比，它直接读写音频编解码器 token（第 \ref{sec:visual-tokens} 节），语气和情绪不会在转写成文字时丢失，延迟也更低。
+原生多模态模型可以把同样的思路推广到语音：直接读写音频编解码器 token（第 \ref{sec:visual-tokens} 节），在文本、图像和音频上端到端训练。与“语音识别、语言模型、语音合成”三段级联的系统相比，语气、情绪和背景声不会在转写成文字时丢失，延迟也更低。

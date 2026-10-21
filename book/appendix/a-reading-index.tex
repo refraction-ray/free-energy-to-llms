@@ -1,22 +1,24 @@
 \chapter{阅读索引}
 
+表 \ref{tab:content-map} 列出各章的主题与主要技术对象。
+
 \begin{table}[ht]
 \centering\small
 \begin{tabularx}{\textwidth}{>{\bfseries}p{28mm} X X}
 \toprule
 章节 & 主题 & 主要技术对象\\
 \midrule
-第一章 & 生成模型的概率语言与自由能 & 分布、条件生成、KL、自由能\\
-第二章 & 主流生成模型的表达、训练与采样 & 自回归、VAE、Flow、GAN、扩散与能量模型\\
-第三章 & Transformer 的输入、信息流和内部组件 & token、Q/K/V、注意力变体、归一化、FFN、MoE\\
-第四章 & 多模态：理解与生成 & 视觉 token 预算、对比学习与互信息、VLM 连接器、条件注入、统一多模态模型\\
-第五章 & 预训练、微调与奖励 & MLE、SFT、LoRA、偏好优化、可验证奖励\\
-第六章 & 训练系统 & AdamW、Muon、QK-Norm、混合精度、训练显存账本、DP/TP/EP\\
-第七章 & 推理系统 & prefill/decode、KV cache、FlashAttention、PD 分离与服务指标\\
-第八章 & 智能体系统 & 主循环、工具调用、上下文缓存成本、skill 与 memory、agentic search、子智能体、pass@k 与 pass\(^k\)\\
-第九章 & DeepSeek 与 Kimi 架构案例 & MLA、DSA、mHC、CSA/HCA、KDA、AttnRes、Stable LatentMoE\\
-第十章 & 数据与生成结果的评价 & 模式覆盖、FID、Precision/Recall、perplexity、OOD\\
-第十一章 & 生成模型在科学计算中的应用 & 有限温 VAN、神经重整化群、分子材料、线路搜索、量子态、量子线路与张量网络生成\\
+第 \ref{chap:probability-language} 章 & 生成模型的概率语言与自由能 & 分布、条件生成、KL、自由能\\
+第 \ref{chap:model-families} 章 & 主流生成模型的表达、训练与采样 & 自回归、VAE、Flow、GAN、扩散与能量模型\\
+第 \ref{chap:transformer} 章 & Transformer 的输入、信息流和内部组件 & token、Q/K/V、注意力变体、归一化、FFN、MoE\\
+第 \ref{chap:multimodal} 章 & 多模态：理解与生成 & 视觉 token 预算、对比学习与互信息、VLM 连接器、条件注入、统一多模态模型\\
+第 \ref{chap:training-methods} 章 & 预训练、微调与奖励 & MLE、SFT、LoRA、偏好优化、可验证奖励\\
+第 \ref{chap:training-stability} 章 & 训练系统 & AdamW、Muon、QK-Norm、混合精度、训练显存账本、DP/TP/EP\\
+第 \ref{chap:inference-systems} 章 & 推理系统 & prefill/decode、KV cache、FlashAttention、PD 分离与服务指标\\
+第 \ref{chap:agents} 章 & 智能体系统 & 主循环、工具调用、上下文缓存成本、skill 与 memory、子智能体、pass@k 与 pass\(^k\)\\
+第 \ref{chap:modern-arch} 章 & DeepSeek 与 Kimi 架构案例 & MLA、DSA、mHC、CSA/HCA、KDA、AttnRes、Stable LatentMoE\\
+第 \ref{chap:data-patterns} 章 & 数据与生成结果的评价 & 模式覆盖、FID、Precision/Recall、perplexity、OOD\\
+第 \ref{chap:science} 章 & 生成模型在科学计算中的应用 & 有限温 VAN、神经重整化群、分子材料、线路搜索、量子态、量子线路与张量网络生成\\
 \bottomrule
 \end{tabularx}
 \caption{各章主题与主要技术对象的阅读索引。}

@@ -7,11 +7,11 @@ Transformer 把一组 token 向量变成一组包含上下文信息的向量。�
 
 在展开具体结构之前，先回答一个容易被跳过的问题：离散文本的生成，为什么最后是自回归占了主流？这里没有一条定理保证它，只是几件事叠在一起的结果。
 
-第一，链式法则给出的是精确、逐项归一化的似然。每个位置只是一个 \(|\mathcal V|\) 类分类问题，损失是交叉熵，训练目标没有额外的近似。第二，teacher forcing 让所有位置在一次前向里并行监督，而且每个 token 都贡献一项损失，监督信号密集。第三，序列长度是可变的，生成长度由模型自己决定，不需要为不同长度设计特殊机制。第四，条件化几乎免费：提示词就是前缀，条件生成不需要另外的接口。第五，工程上 KV cache 把串行解码的重复计算去掉，批处理与推测解码再把固定开销摊薄，串行不再等于不可接受。
+第一，链式法则给出的是精确、逐项归一化的似然。每个位置只是一个 \(|\mathcal V|\) 类分类问题，损失是交叉熵，训练目标没有额外的近似。第二，teacher forcing 让所有位置在一次前向里并行监督，而且每个 token 都贡献一项损失，监督信号密集。第三，序列长度是可变的，生成长度由模型自己决定，不需要为不同长度设计特殊机制。第四，条件化几乎免费：提示词就是前缀，条件生成不需要另外的接口。第五，工程上键值缓存（Key--Value cache，KV cache）把串行解码的重复计算去掉，批处理与推测解码再把固定开销摊薄，串行不再等于不可接受。
 
 离散扩散是主要的替代方案。它需要额外设计吸收态和转移矩阵，多个位置同时去掩码时还要保证联合分布的一致性；连续扩散在图像上的成功不能直接搬过来。它在并行采样和可控性上有优势，但训练目标和采样程序都比自回归复杂。
 
-所以更准确的说法是：自回归在离散序列上的优势，来自“目标简单、监督密集、工程成熟”的叠加，而不是“离散数据只能这样生成”。如果硬件形态或算法改变——例如并行采样的收益变得更大，或者离散扩散的训练目标变得更简单——这个格局未必不变。
+所以更准确的说法是：自回归在离散序列上的优势，来自“目标简单、监督密集、工程成熟”的叠加。如果硬件形态或算法改变——例如并行采样的收益变得更大，或者离散扩散的训练目标变得更简单——这个格局未必不变。
 
 \section{Transformer 的共同骨架与三种模型结构}
 
@@ -19,9 +19,9 @@ Transformer 把一组 token 向量变成一组包含上下文信息的向量。�
 
 在自然语言处理中，原始文字先由分词器（tokenizer）按预先确定的规则转换为 token 编号序列 \(x_1,\ldots,x_T\)，每个编号都属于有限词表 \(\mathcal V\)。token 可以是完整单词、字、子词、标点或其他文本片段；词表通常还包含 BOS、EOS 等特殊 token。编号只是类别标签，编号顺序只是词表中的索引，与语义距离无关。词表和切分规则通常在模型训练前确定，它们会影响序列长度 \(T\) 和后续词表矩阵的大小。
 
-分词器本身是一个独立的预处理算法。以字节对编码（Byte-Pair Encoding，BPE）为例：从字符或字节开始，统计语料中相邻符号对的频率，反复把最高频的一对合并成新符号，直到词表达到预定大小；合并规则固定后，训练和推理都使用同一套规则~\cite{sennrich2016bpe,radford2019gpt2}。字节级 BPE 先把文本转成 UTF-8 字节，因此任何字符都能表示，未登录词只会退化成更多字节，而不是一个特殊的 UNK。
+分词器本身是一个独立的预处理算法。以字节对编码（Byte-Pair Encoding，BPE）为例：从字符或字节开始，统计语料中相邻符号对的频率，反复把最高频的一对合并成新符号，直到词表达到预定大小；合并规则固定后，训练和推理都使用同一套规则~\cite{sennrich2016bpe,radford2019gpt2}。字节级 BPE 先把文本转成 UTF-8 字节，因此任何字符都能表示：未登录词只会拆成更多的字节 token，词表中不需要未知词标记 UNK（unknown）。
 
-词表大小是一个取舍。词表越大，同样的文本切成越少的 token，序列更短，注意力和 KV cache 的成本随之下降；但输入嵌入和输出 softmax 的参数量、以及稀有 token 的统计量都会增加。中文、日文等多字节文字在字节级词表下通常占更多 token；数字常被拆成单个数字，这对算术有利也有弊；科学文本里的公式、单位和上下标往往没有专门的 token，会被切成不自然的片段。这些切分方式直接影响模型看到什么，而不只是预处理细节。
+词表大小是一个取舍。词表越大，同样的文本切成越少的 token，序列更短，注意力和 KV cache 的成本随之下降；但输入嵌入和输出 softmax 的参数量、以及稀有 token 的统计量都会增加。中文、日文等多字节文字在字节级词表下通常占更多 token；数字常被拆成单个数字，这对算术有利也有弊；科学文本里的公式、单位和上下标往往没有专门的 token，会被切成不自然的片段。这些切分方式直接影响模型看到什么。
 
 特殊 token 还承担结构标记：BOS、EOS、填充、对话角色等。对话模板把多轮消息拼成一条带标记的序列，训练和推理必须使用同一套模板，否则条件分布会对不上。不同 tokenizer 的 per-token 概率不能直接比较，这一点在评价语言模型时会再次用到。
 
@@ -109,7 +109,7 @@ GPT 采用 Decoder-only 结构。它保留因果自注意力、FFN、残差和�
 
 Encoder 和 Decoder 的层内骨架很相似，都使用自注意力、FFN、残差连接和归一化。就\textbf{自注意力的可见范围}而言，Encoder 中每个 token 可以读取所有输入 token；Decoder 的自注意力加上 causal mask（因果掩码），第 \(t\) 个位置只能读取自己和此前的 token。原始 Encoder--Decoder 架构中的 Decoder 还通过交叉注意力读取 Encoder 的输出。
 
-BERT 做完形填空，是为了在双向上下文中学习恢复被扰动的内容；GPT 预测下一 token，是为了让训练时的条件与逐步生成时可得到的前缀一致。两者常用的逐位置损失都是词表上的交叉熵，区别主要在条件里能看到什么，以及在哪些位置计算损失。原始 Encoder--Decoder 也预测下一目标 token，但额外以完整源序列为条件。
+BERT 做完形填空，是为了在双向上下文中学习恢复被扰动的内容；GPT 预测下一 token，是为了让训练时的条件与逐步生成时可得到的前缀一致。两者常用的逐位置损失都是词表上的交叉熵，区别主要在条件里能看到什么，以及在哪些位置计算损失。原始 Encoder--Decoder 也预测下一目标 token，但额外以完整源序列为条件（表 \ref{tab:transformer-objectives}）。
 
 \begin{table}[ht]
 \centering\small
@@ -147,19 +147,19 @@ GPT & 当前目标之前的 token & 各目标位置的下一 token NLL & 从前�
 \end{equation}
 这里 \(W_{Q,i},W_{K,i}\in\R^{d\times d_k}\)、\(W_{V,i}\in\R^{d\times d_v}\) 是第 \(i\) 个 head 自己的投影，因此每个 head 在自己的子空间里独立做一次内容寻址；\(W_O\in\R^{hd_v\times d}\) 是输出投影，把 \(h\) 个子空间的结果混合回 \(d\) 维残差流。单个 head 的表达能力有限，多头的作用是让模型同时维护多种不同的相似度度量。“拼接后投影”这一步不能省：没有 \(W_O\)，各 head 的输出只是并列拼在一起，无法互相组合。
 
-这里每个符号都对应一个实际张量。\(X\) 的第 \(t\) 行是第 \(t\) 个 token 的 hidden vector；\(q_t\) 是“当前 token 想找什么”的 query，\(k_j\) 是“第 \(j\) 个 token 提供什么索引”的 key，\(v_j\) 是被读取的内容。矩阵 \(QK^\mathsf T\) 的第 \((t,j)\) 个元素是 query \(t\) 对 key \(j\) 的相似度，因果 mask 把 \(j>t\) 的位置变成 \(-\infty\)，softmax 后这些位置的权重为零；记权重矩阵为 \(A\)，则 \(AV\) 是对可见位置 value 的加权和，再经 \(W_O\) 回到残差流。训练时词表交叉熵的梯度沿 \(W_O\)、\(A\)、\(QK^\mathsf T\) 回传到 \(Q,K,V\) 及其投影权重。图 \ref{fig:causal-mask} 展示了哪些位置可见、哪些位置被遮盖。注意力权重反映这一层的读取模式，可以用来看模型在哪些位置交换信息。若关心某一层表示里是否包含某个物理量，可以在该层特征上训练一个线性探针，看它能否被线性读出。
+这里每个符号都对应一个实际张量。\(X\) 的第 \(t\) 行是第 \(t\) 个 token 的隐藏向量；\(q_t\) 是“当前 token 想找什么”的 query，\(k_j\) 是“第 \(j\) 个 token 提供什么索引”的 key，\(v_j\) 是被读取的内容。矩阵 \(QK^\mathsf T\) 的第 \((t,j)\) 个元素是 query \(t\) 对 key \(j\) 的相似度，因果 mask 把 \(j>t\) 的位置变成 \(-\infty\)，softmax 后这些位置的权重为零；记权重矩阵为 \(A\)，则 \(AV\) 是对可见位置 value 的加权和，再经 \(W_O\) 回到残差流。训练时词表交叉熵的梯度沿 \(W_O\)、\(A\)、\(QK^\mathsf T\) 回传到 \(Q,K,V\) 及其投影权重。图 \ref{fig:causal-mask} 展示了哪些位置可见、哪些位置被遮盖。注意力权重反映这一层的读取模式，可以用来看模型在哪些位置交换信息。若关心某一层表示里是否包含某个物理量，可以在该层特征上训练一个线性探针，看它能否被线性读出。
 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\textwidth]{causal_mask.pdf}
-\caption{因果 self-attention 的可见性矩阵。}
+\caption{因果自注意力的可见性与两种计算顺序。左：纵轴是 key 位置 \(k_j\)，横轴是 query 位置 \(q_t\)；对角线左上方 \(j>t\) 的格子设为 \(-\infty\)，softmax 权重为零。中：训练时一次前向并行算出注意力矩阵的全部 \(T\) 行（每个 query 一行）。右：解码时只有新的 \(q_T\) 读取缓存的 K/V；两者使用同一个 mask，只是计算顺序不同。}
 \label{fig:causal-mask}
 \end{figure}
 
 \Needspace{10\baselineskip}
 \section{注意力的几种变体：共享键值与汇总历史}
 
-这里的“位置”是 token 在序列中的索引：\(t\) 表示当前要计算输出的 token，\(s\leq t\) 表示因果注意力可读取的第 \(s\) 个 token，其中 \(s<t\) 是先前 token，\(s=t\) 是当前 token。键 \(k_{s,i}\) 和值 \(v_{s,i}\) 由第 \(s\) 个 token 在本层的输入表示投影得到。前面的多头注意力（MHA）有 \(h\) 个 query heads，每个 head 都用自己的 \(W_{Q,i},W_{K,i},W_{V,i}\) 投影，因此每个可见 token \(s\) 都为各 head 提供一组 \(k_{s,i},v_{s,i}\)。所谓\textbf{共享 K/V}，指多个 query heads 使用同一组 K/V 投影，读取同一个 token 时共用它的键和值；不同 token 的 K/V 仍然不同，query 投影也仍然按 head 区分。设第 \(i\) 个 query head 被分配到第 \(g(i)\) 组 K/V，其输出可以统一写成
+这里的“位置”是 token 在序列中的索引：\(t\) 表示当前要计算输出的 token，\(s\leq t\) 表示因果注意力可读取的第 \(s\) 个 token，其中 \(s<t\) 是先前 token，\(s=t\) 是当前 token。键 \(k_{s,i}\) 和值 \(v_{s,i}\) 由第 \(s\) 个 token 在本层的输入表示投影得到。前面的 MHA 有 \(h\) 个 query heads，每个 head 都用自己的 \(W_{Q,i},W_{K,i},W_{V,i}\) 投影，因此每个可见 token \(s\) 都为各 head 提供一组 \(k_{s,i},v_{s,i}\)。所谓\textbf{共享 K/V}，指多个 query heads 使用同一组 K/V 投影，读取同一个 token 时共用它的键和值；不同 token 的 K/V 仍然不同，query 投影也仍然按 head 区分。设第 \(i\) 个 query head 被分配到第 \(g(i)\) 组 K/V，其输出可以统一写成
 \begin{equation}
  o_{t,i}=\sum_{s\le t}
  \frac{\exp\bigl(q_{t,i}^{\mathsf T}k_{s,g(i)}/\sqrt{d_k}\bigr)}
@@ -203,7 +203,7 @@ S_t&=S_{t-1}+v_t\phi(k_t)^{\mathsf T},\qquad S_0=0,\label{eq:linear-attention-st
 z_t&=z_{t-1}+\phi(k_t),\qquad z_0=0,\label{eq:linear-attention-normalizer}\\
 o_t&=\frac{S_t\phi(q_t)}{z_t^{\mathsf T}\phi(q_t)+\varepsilon}.\label{eq:linear-attention-output}
 \end{align}
-\(S_t\in\R^{d_v\times m}\) 把 key 特征与 value 关联起来，\(z_t\in\R^m\) 保存归一化所需的特征总量。这里先把当前 \(k_t,v_t\) 写入状态，再用 \(q_t\) 读取，所以输出只依赖前 \(t\) 个 token。
+\(S_t\in\R^{d_v\times m}\) 把 key 特征与 value 关联起来，\(z_t\in\R^m\) 保存归一化所需的特征总量。这里先把当前 \(k_t,v_t\) 写入状态，再用 \(q_t\) 读取，所以输出只依赖前 \(t\) 个 token（图 \ref{fig:linear-attention-state}）。
 
 \begin{figure}[H]
 \centering
@@ -253,13 +253,13 @@ MLA & 每个前缀 token 存低维向量，供各 head 生成 K/V & 压缩每个
 \subsection{位置编码：绝对位置、RoPE 与 ALiBi}
 \label{sec:rope}
 
-位置编码解决的是 self-attention 本身对 token 排列置换不敏感的问题。绝对位置 embedding 直接把一个可学习向量 \(p_t\) 加到 token embedding；它在训练长度内简单有效，但长度外推时没有未见过的位置向量。RoPE（Rotary Position Embedding，旋转位置编码）把每两维组成二维平面，在位置 \(m\) 施加旋转矩阵 \(R_{\theta,m}\)：
+位置编码解决的是自注意力本身对 token 排列置换不敏感的问题。绝对位置嵌入直接把一个可学习向量 \(p_t\) 加到 token 嵌入；它在训练长度内简单有效，但长度外推时没有未见过的位置向量。Rotary Position Embedding（RoPE）把每两维组成二维平面，在位置 \(m\) 施加旋转矩阵 \(R_{\theta,m}\)：
 \begin{equation}
  q_m'=R_{\theta,m}q_m,\qquad k_n'=R_{\theta,n}k_n,\qquad
  (q_m')^\mathsf T k_n'
  =q_m^\mathsf T R_{\theta,n-m}k_n.
 \end{equation}
-最后一个等式说明内积依赖相对位置 \(n-m\)，这个依赖直接来自旋转角度的差。ALiBi（Attention with Linear Biases，带线性偏置的注意力）保留 Q/K 原样，在 logit 中加入距离惩罚 \(b_h(m-n)\)~\cite{su2021rope,press2022alibi}。RoPE 的优势是保留多维相位关系，ALiBi 的优势是形式简单、距离偏置直接；两者都需要与训练长度、频率尺度和数值范围一起设计。
+最后一个等式说明内积依赖相对位置 \(n-m\)，这个依赖直接来自旋转角度的差。Attention with Linear Biases（ALiBi）保留 Q/K 原样，在 logit 中加入距离惩罚 \(b_h(m-n)\)~\cite{su2021rope,press2022alibi}。RoPE 的优势是保留多维相位关系，ALiBi 的优势是形式简单、距离偏置直接；两者都需要与训练长度、频率尺度和数值范围一起设计。
 
 \subsection{归一化与残差连接}
 
@@ -269,7 +269,7 @@ MLA & 每个前缀 token 存低维向量，供各 head 生成 K/V & 压缩每个
 \end{equation}
 其中 \(\varepsilon\) 是防止分母过小的固定常数；\(\gamma,\beta\in\R^d\) 分别是训练得到的逐通道缩放和偏移，每个 LayerNorm 层有 \(2d\) 个可训练参数。均值和方差由当前输入计算；同一层的 \(\gamma,\beta\) 在所有 token 位置共享。
 
-对注意力或 FFN 子层 \(\mathcal F_l\)，Post-Norm 在残差相加后归一化，即 \(h_{l+1}=\operatorname{Norm}(h_l+\mathcal F_l(h_l))\)。Pre-Norm 先归一化子层输入，再把输出加回原始残差，即 \(h_{l+1}=h_l+\mathcal F_l(\operatorname{Norm}(h_l))\)。两者使用相同的归一化规则，差别在归一化的位置。Pre-Norm 给梯度提供更直接的 residual path，深层训练通常更稳定；均方根归一化（Root Mean Square Layer Normalization，RMSNorm）只用
+对注意力或 FFN 子层 \(\mathcal F_l\)，Post-Norm 在残差相加后归一化，即 \(h_{l+1}=\operatorname{Norm}(h_l+\mathcal F_l(h_l))\)。Pre-Norm 先归一化子层输入，再把输出加回原始残差，即 \(h_{l+1}=h_l+\mathcal F_l(\operatorname{Norm}(h_l))\)。两者使用相同的归一化规则，差别在归一化的位置；图 \ref{fig:transformer-block} 左侧是一个 Pre-Norm block。Pre-Norm 给梯度提供更直接的残差路径，深层训练通常更稳定；均方根归一化（Root Mean Square Layer Normalization，RMSNorm）只用
 \begin{equation}
 \operatorname{RMSNorm}(x)_j=\gamma_j\frac{x_j}{\sqrt{d^{-1}\sum_kx_k^2+\varepsilon}},
 \end{equation}
@@ -297,7 +297,7 @@ MLA & 每个前缀 token 存低维向量，供各 head 生成 K/V & 压缩每个
  \operatorname{SwiGLU}(h)=W_d[\operatorname{SiLU}(g)\odot u].
  \label{eq:swiglu}
 \end{equation}
-\(W_g,W_u\) 将表示升到中间宽度，\(\odot\) 表示对应通道逐元素相乘，\(W_d\) 再投影回残差维度。门控让同一内容分支在不同输入下有不同的通道权重；这里的 SiLU 系数可为负，也不限制在 \([0,1]\)，因此它提供连续的可学习调制。训练梯度同时更新两个升维分支和降维矩阵。
+\(W_g,W_u\) 将表示升到中间宽度，\(\odot\) 表示对应通道逐元素相乘，\(W_d\) 再投影回残差维度。门控让同一内容分支在不同输入下有不同的通道权重；门控分支的输出 \(\operatorname{SiLU}(g)\) 可以为负，也不限于 \([0,1]\)，因此它提供连续的可学习调制。训练梯度同时更新两个升维分支和降维矩阵。
 
 \begin{figure}[ht]
 \centering
@@ -308,22 +308,22 @@ MLA & 每个前缀 token 存低维向量，供各 head 生成 K/V & 压缩每个
 
 \subsection{词表输出与训练、生成流程}
 
-最后一个 block 的 hidden state 还不直接是概率。若位置 \(t\) 输入的是 \(x_t\)，那么 \(h_t^{(L)}\) 已经读取 \(x_{\le t}\)，用于预测 \(x_{t+1}\)；BOS 对应位置 \(t=0\)。模型先算出词表 logits
+最后一个 block 的隐藏状态还不直接是概率。若位置 \(t\) 输入的是 \(x_t\)，那么 \(h_t^{(L)}\) 已经读取 \(x_{\le t}\)，用于预测 \(x_{t+1}\)；BOS 对应位置 \(t=0\)。模型先算出词表 logits
 \begin{equation}
  l_t=W_{\mathrm{vocab}}h_t^{(L)}\in\R^{|\mathcal V|},
  \qquad
  p_\theta(x_{t+1}=v\mid x_{\le t})=\frac{\exp(l_{t,v}/\tau)}{\sum_{u\in\mathcal V}\exp(l_{t,u}/\tau)},
 \end{equation}
-其中 \(W_{\mathrm{vocab}}\in\R^{|\mathcal V|\times d}\) 是词表投影，往往与输入 embedding 共享参数；\(\tau\) 在这里是采样温度，训练时取 \(\tau=1\)，此时这一行就是一个标准 softmax。所以“残差流中的向量”到“下一个 token 的概率”之间只有一次线性投影加一次 softmax，整个模型的输出维度就是词表大小 \(|\mathcal V|\)。
+其中 \(W_{\mathrm{vocab}}\in\R^{|\mathcal V|\times d}\) 是词表投影，往往与输入嵌入共享参数；\(\tau\) 在这里是采样温度，训练时取 \(\tau=1\)，此时这一行就是一个标准 softmax。所以“残差流中的向量”到“下一个 token 的概率”之间只有一次线性投影加一次 softmax，整个模型的输出维度就是词表大小 \(|\mathcal V|\)。
 
-对一个长度为 \(T\) 的 batch，训练时把真实 token 序列一次送入网络；causal mask 使第 \(t\) 行只能使用 \(1,\ldots,t\) 的表示，各位置仍可并行计算。每个位置产生 logits \(l_t\)，softmax 给出词表分布，交叉熵取出真实下一个 token 的负对数概率，梯度再经过词表投影、FFN、注意力和输入 embedding 传播。生成时把新 token 加入前缀，再计算下一个位置的条件分布；新的位置必须等待上一步的输出。
+对一个长度为 \(T\) 的 batch，训练时把真实 token 序列一次送入网络；causal mask 使第 \(t\) 行只能使用 \(1,\ldots,t\) 的表示，各位置仍可并行计算。每个位置产生 logits \(l_t\)，softmax 给出词表分布，交叉熵取出真实下一个 token 的负对数概率，梯度再经过词表投影、FFN、注意力和输入嵌入传播。生成时把新 token 加入前缀，再计算下一个位置的条件分布；新的位置必须等待上一步的输出。
 
 \section{解码：从 logits 到文本}
 \label{sec:decoding}
 
 模型给出的是每个位置上的条件分布 \(p_\theta(\cdot\mid x_{<t})\)；解码要做的是从中选一个 token，再把它接回前缀。选择方式会改变整条序列的分布，也会改变生成结果的多样性、重复程度和可复现性。下面按“是否保持模型分布”把常用做法分成几组。
 
-\textbf{确定性与搜索。}贪心解码每一步取概率最大的 token。它可复现、延迟最低，代价是容易陷入重复循环，生成结果偏离 \(p_\theta\) 的联合分布。beam search 保留 \(B\) 条累计对数概率最高的部分序列，在每一步扩展后重新排序，最后取分数最高的一条。它给出的是序列级最大后验的近似，不产生从 \(p_\theta\) 抽出的独立样本；beam 越大，结果越保守，越容易偏向训练数据里常见的表达。对比解码（contrastive decoding）和 DoLa 用两套 logits 的差来抑制通用、模板化的 token：一套来自较强或较深的层，另一套来自较弱或较浅的层，二者相减后重新归一化~\cite{li2023contrastive,chuang2023dola}。
+\textbf{确定性与搜索。}贪心解码每一步取概率最大的 token。它可复现、延迟最低，代价是容易陷入重复循环，生成结果偏离 \(p_\theta\) 的联合分布。beam search 保留 \(B\) 条累计对数概率最高的部分序列，在每一步扩展后重新排序，最后取分数最高的一条。它近似寻找 \(p_\theta\) 下概率最高的序列，即分布的众数，结果是确定的，不对应 \(p_\theta\) 的随机样本；beam 越大，结果越保守，越容易偏向训练数据里常见的表达。对比解码（contrastive decoding）用一大一小两个模型的对数概率之差给 token 打分，压低小模型也会给高概率的通用、模板化 token~\cite{li2023contrastive}；DoLa（Decoding by Contrasting Layers）在同一模型内做类似比较，用深层与浅层输出的对数概率之差~\cite{chuang2023dola}。
 
 \textbf{随机采样。}温度采样把 logit 除以 \(\tau\) 再做 softmax：\(\tau<1\) 使分布更尖，\(\tau>1\) 使分布更平。top-\(k\) 只保留概率最高的 \(k\) 个 token 后重新归一化；nucleus sampling（top-\(p\)）保留累计概率首次达到 \(p\) 的最小集合~\cite{holtzman2020curious}；min-\(p\) 保留概率不低于最大概率固定比例的 token；locally typical sampling 保留那些“信息量接近当前分布熵”的 token~\cite{meister2022typical}。这些操作都在改变分布：只有不截断且 \(\tau=1\) 时，逐步随机抽取才严格对应模型自身的 \(p_\theta(x)\)。
 
@@ -343,7 +343,7 @@ MLA & 每个前缀 token 存低维向量，供各 head 生成 K/V & 压缩每个
 \midrule
 按模型分布采样（\(\tau=1\)、不截断） & 无，严格对应 \(p_\theta\) & 得到模型自身的样本 & 长尾与重复不受控\\
 贪心 / beam search & 选择规则：退化为点估计或近似最大后验 & 稳定、可复现 & 容易重复、缺乏多样性；beam 计算量随宽度增加\\
-温度、top-\(k\)、top-\(p\)、min-\(p\)、typical & 采样分布：平滑、截断或重归一化 & 控制多样性与生成长度 & PPL 与校准不再对应 \(p_\theta\)\\
+温度、top-\(k\)、top-\(p\)、min-\(p\)、typical & 采样分布：平滑、截断或重归一化 & 控制多样性与生成长度 & 困惑度与校准不再对应 \(p_\theta\)\\
 重复惩罚 & logit & 抑制循环 & 可能压掉必要的重复\\
 约束解码 & 支撑集：限制在合法序列 & 保证输出符合语法或 schema & 质量可能下降\\
 self-consistency / best-of-\(N\) & 最终答案的选择 & 提高最终答案的正确率 & 多次生成与评分\\

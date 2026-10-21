@@ -7,7 +7,7 @@
 
 \section{从因果注意力到 KV cache}
 
-设提示词已经有 \(x_1,\ldots,x_{t-1}\)，现在把新 token \(x_t\) 接在末尾。最直接的生成程序会把长度为 \(t\) 的整段前缀重新送入 Transformer，以取得位置 \(t\) 的输出，再预测 \(x_{t+1}\)。但这也重新计算了位置 \(1,\ldots,t-1\) 的 embedding、各层 Q/K/V、注意力和 FFN。因果 mask 使这些旧位置看不到新加入的 \(x_t\)，所以在模型参数不变时，旧位置在每一层的结果与上一步完全相同；重复计算它们没有必要。
+设提示词已经有 \(x_1,\ldots,x_{t-1}\)，现在把新 token \(x_t\) 接在末尾。最直接的生成程序会把长度为 \(t\) 的整段前缀重新送入 Transformer，以取得位置 \(t\) 的输出，再预测 \(x_{t+1}\)。但这也重新计算了位置 \(1,\ldots,t-1\) 的嵌入、各层 Q/K/V、注意力和 FFN。因果 mask 使这些旧位置看不到新加入的 \(x_t\)，所以在模型参数不变时，旧位置在每一层的结果与上一步完全相同；重复计算它们没有必要。
 
 看其中任意一层 \(\ell\) 的一个 attention head。令 \(u_i^{(\ell)}\) 是位置 \(i\) 送入该层注意力的向量；若该层采用 Pre-Norm，\(u_i^{(\ell)}\) 就是归一化后的层输入。投影得到 \(q_i^{(\ell)}=W_Q^{(\ell)}u_i^{(\ell)}\)、\(k_i^{(\ell)}=W_K^{(\ell)}u_i^{(\ell)}\) 和 \(v_i^{(\ell)}=W_V^{(\ell)}u_i^{(\ell)}\)。位置 \(t\) 的注意力输出为
 \begin{equation}
@@ -54,7 +54,7 @@
 \begin{equation}
  2\times80\times128000\times8\times128\times2\ \text{bytes}\approx 39.1\ \text{GiB}.
 \end{equation}
-其中 \(1\,\mathrm{GiB}=2^{30}\) 字节。这是一个数量级估算，实际模型还会有层间布局、padding、量化、分组和并发请求；它足以说明为什么 GQA、MLA、paged cache 和长上下文调度很重要。
+这是一个数量级估算，实际模型还会有层间布局、padding、量化、分组和并发请求；它足以说明为什么 GQA、MLA、paged cache 和长上下文调度很重要。
 
 图 \ref{fig:attention-cache-variants} 在同一组 head 数和维度假设下比较 MHA、GQA、MQA 与 MLA 保存的历史状态。MHA 为每个 head 保存键和值；GQA 和 MQA 通过共享减少组数；MLA 保存低维表示和位置分支。具体比例取决于模型配置，所示百分比只对应标注的示例参数。
 
@@ -86,19 +86,19 @@ FlashAttention 的 tiling 是把矩阵切成片上存储能容纳的小块~\cite
 \end{equation}
 例如第一块只有 \(a=0,v=10\)，更新后 \(Z_i=1,U_i=10\)；第二块只有 \(a=\ln 2,v=20\)，因为 \(e^{\ln 2}=2\)，它给分母增加 \(2\)、给分子增加 \(40\)，于是 \(Z_i=3,U_i=50\)，最终输出为 \(50/3\)。一次性对两项做 softmax，权重比也是 \(1:2\)，结果相同。“在线”就是每来一块便更新这两个累计量；各块提供的是部分和，归一化留到最后。
 
-实际计算还要避免 \(e^{a_{ij}}\) 过大而溢出。于是每个 query 行另存一个已处理分数的最大值 \(m\)，把指数改写成 \(e^{a_{ij}-m}\)，并以这个基准保存分子和分母。若新块把最大值提高到 \(m'\)，旧的两个累计量都先乘 \(e^{m-m'}\)，再加入按 \(m'\) 计算的新块；这样新旧贡献始终使用同一基准。图 \ref{fig:gpu-memory} 展示了这个读写顺序。FlashAttention 保留逐对 Q--K 匹配，省去的是完整 \(T\times T\) 中间矩阵在 HBM 中的写入与读回。后续 FlashAttention-2 改进并行与工作划分~\cite{dao2023flashattention2}；FlashAttention-3 进一步利用异步执行和低精度计算~\cite{dao2024flashattention3}。
+实际计算还要避免 \(e^{a_{ij}}\) 过大而溢出。于是每个 query 行另存一个已处理分数的最大值 \(m\)，把指数改写成 \(e^{a_{ij}-m}\)，并以这个基准保存分子和分母。若新块把最大值提高到 \(m'\)，旧的两个累计量都先乘 \(e^{m-m'}\)，再加入按 \(m'\) 计算的新块；这样新旧贡献始终使用同一基准。图 \ref{fig:flashattention-io} 展示了这个读写顺序。FlashAttention 保留逐对 Q--K 匹配，省去的是完整 \(T\times T\) 中间矩阵在 HBM 中的写入与读回。后续 FlashAttention-2 改进并行与工作划分~\cite{dao2023flashattention2}；FlashAttention-3 进一步利用异步执行和低精度计算~\cite{dao2024flashattention3}。
 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\textwidth]{flashattention_io.pdf}
 \caption{FlashAttention 改变矩阵分块与搬运顺序：从 HBM 读入一块 Q 和各块 K/V，在片上累加 softmax 分子与分母，处理完所有 K/V 块后才得到最终输出，避免物化完整的 $T\times T$ 中间矩阵。}
-\label{fig:gpu-memory}
+\label{fig:flashattention-io}
 \end{figure}
 
 \section{分页缓存、结构化服务与推测解码}
 \label{sec:paged-serving}
 
-当多个请求同时生成时，每条历史的长度不断变化，预先分配连续大块显存容易浪费空间。推理引擎 vLLM 的 PagedAttention 借鉴虚拟内存，把 KV cache 切成固定大小的 block，让不同请求的前缀共享物理页面并减少碎片~\cite{kwon2023vllm,vllmblog}。结构化生成语言与运行时 SGLang（Structured Generation Language）进一步把多次生成与工具调用组织成程序。其 RadixAttention 用前缀树索引可复用的历史缓存；连续批处理则在每轮生成后及时加入新请求、移除已完成请求，适合多轮对话、工具调用、树状推理和多个分支共享前缀的场景~\cite{zheng2024sglang,sglangdocs}。智能体每一轮都把上一轮的完整输入作为前缀重新提交，是这种前缀复用最典型的负载，见第 \ref{chap:agents} 章。
+当多个请求同时生成时，每条历史的长度不断变化，预先分配连续大块显存容易浪费空间。推理引擎 vLLM 的 PagedAttention 借鉴虚拟内存，把 KV cache 切成固定大小的 block，让不同请求的前缀共享物理页面并减少碎片~\cite{kwon2023vllm,vllmblog}。SGLang（Structured Generation Language）进一步把多次生成与工具调用组织成程序。其 RadixAttention 用前缀树索引可复用的历史缓存；连续批处理则在每轮生成后及时加入新请求、移除已完成请求，适合多轮对话、工具调用、树状推理和多个分支共享前缀的场景~\cite{zheng2024sglang,sglangdocs}。智能体每一轮都把上一轮的完整输入作为前缀重新提交，是这种前缀复用最典型的负载，见第 \ref{chap:agents} 章。
 
 例如请求 A 正在逐 token 生成时，请求 B 完成 prefill 并取得首 token。连续批处理可以在下一轮 decode 把 B 加入正在运行的 batch，A 完成后则把它移出；B 不必等 A 生成完整段文字。两条请求的历史长度不同，分页缓存分别记录它们的 KV 页面，调度器在每轮为各请求安排一个新位置。
 
@@ -108,7 +108,7 @@ FlashAttention 的 tiling 是把矩阵切成片上存储能容纳的小块~\cite
 
 这个方案把“计算组织”的权衡摆到了读者面前。收益是两类阶段都可以按各自最优的并行策略和 batch 形状运行，且各自独立扩缩容；代价是 KV cache 需要跨节点传输，传输量恰好等于第 \ref{sec:kv-budget} 节估算的那个体积，因此 PD 分离是否划算取决于网络带宽与 KV 大小之比。对长上下文和长输出场景，这个比值通常是有利的；对短请求，传输开销可能吃掉全部收益。DeepSeek-V4 与 Kimi K3 把“异构 cache 的 offload/prefetch”和“外部 KV pool”写进系统设计，处理的正是这一步带来的数据搬运问题。
 
-要看清 PD 分离改善了什么，需要分开记录服务指标。按本章的生成顺序，请求先等待并完成 prefill，由末位置输出首 token；随后传输 KV，decode 池才用这个 token 继续生成。首 token 时间（Time to First Token，TTFT）从请求到达到首 token 返回；相邻 token 间延迟（Inter-Token Latency，ITL）记录连续两次输出之间的等待；吞吐量则统计单位时间内所有请求共同完成的 token 数。
+要看清 PD 分离改善了什么，需要分开记录服务指标。按本章的生成顺序，请求先等待并完成 prefill，由末位置输出首 token；随后传输 KV，decode 池才用这个 token 继续生成。首 token 时间（Time to First Token，TTFT）从请求到达到首 token 返回；相邻 token 间延迟（Inter-Token Latency，ITL）记录连续两次输出之间的等待；吞吐量则统计单位时间内所有请求共同完成的 token 数。表 \ref{tab:pd-serving-metrics} 列出 PD 分离对这三项指标的影响。
 
 \begin{table}[ht]
 \centering\small
@@ -125,11 +125,11 @@ FlashAttention 的 tiling 是把矩阵切成片上存储能容纳的小块~\cite
 \label{tab:pd-serving-metrics}
 \end{table}
 
-speculative decoding 使用较小的 draft model 生成候选 token，大模型批量验证~\cite{leviathan2023speculative}。如果接受规则设计正确，最终输出保持目标模型的分布；系统收益来自把串行目标模型调用变成“少量 draft 串行 + 一次目标模型并行验证”。这次验证仍计算多个候选位置，主要节省的是目标模型逐 token 调用的串行等待。这是工程加速通过改变计算组织而保持目标概率分布不变的一个典型例子。
+speculative decoding 使用较小的 draft model 生成候选 token，大模型批量验证~\cite{leviathan2023speculative}（图 \ref{fig:speculative-decoding}）。如果接受规则设计正确，最终输出保持目标模型的分布；系统收益来自把串行目标模型调用变成“少量 draft 串行 + 一次目标模型并行验证”。这次验证仍计算多个候选位置，主要节省的是目标模型逐 token 调用的串行等待。这是工程加速通过改变计算组织而保持目标概率分布不变的一个典型例子。
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{speculative_decoding.pdf}
 \caption{推测解码：小模型串行提出四个候选，目标模型一次计算各候选位置的条件概率，再从左到右判定是否接受。图中前两个候选被接受，第三个被拒绝并修正采样，第四个随之丢弃；正确接受规则保持目标模型的输出分布。}
-\label{fig:serving-stack}
+\label{fig:speculative-decoding}
 \end{figure}

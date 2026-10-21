@@ -94,7 +94,7 @@ I_{t,s}=\sum_j \omega_{t,j}\operatorname{ReLU}\!\left((q^I_{t,j})^\mathsf T k^I_
 \mathcal S_t=\operatorname{TopK}_{s<t} I_{t,s}.
 \label{eq:deepseek-dsa-index}
 \end{equation}
-分数 \(I_{t,s}\) 衡量当前 token 与历史位置 \(s\) 的粗略相关性。所有历史索引键可一起参与打分，得到分数向量 \(I_t=[I_{t,1},\ldots,I_{t,L}]\)。\(\mathcal S_t\) 是索引器交给主注意力的历史位置集合。低维打分扫描全历史，昂贵的主注意力只在这个集合上运行。
+分数 \(I_{t,s}\) 衡量当前 token 与历史位置 \(s\) 的粗略相关性。所有历史索引键可一起参与打分，得到分数向量 \(I_t=[I_{t,1},\ldots,I_{t,t-1}]\)。\(\mathcal S_t\) 是索引器交给主注意力的历史位置集合。低维打分扫描全历史，昂贵的主注意力只在这个集合上运行。
 
 \begin{figure}[H]
 \centering
@@ -111,17 +111,12 @@ I_{t,s}=\sum_j \omega_{t,j}\operatorname{ReLU}\!\left((q^I_{t,j})^\mathsf T k^I_
 \Needspace{13\baselineskip}
 \section{DeepSeek-R1：用可验证奖励选择推理轨迹}
 
-这一节动的是第 4 条轴（训练信号）。语言模型的下一 token 损失学习怎样续写训练文本；数学答案和代码测试还提供了对整条回答的可验证反馈。DeepSeek-R1 在可验证任务的后训练中，把这类奖励与组相对策略优化（GRPO）结合~\cite{deepseekr1}：同一道题由当前模型采样多条推理轨迹，判题器检查最终答案或代码结果，再比较同组轨迹的得分。若第 \(i\) 条轨迹得到奖励 \(r_i\)，核心比较量是式 \eqref{eq:grpo-advantage} 的组内标准化优势
-\begin{equation}
-A_i=\frac{r_i-\operatorname{mean}(r_1,\ldots,r_G)}{\operatorname{std}(r_1,\ldots,r_G)}.
-\label{eq:r1-grpo-advantage}
-\end{equation}
-\(A_i\) 表示这条轨迹比同题其他尝试好多少。GRPO 按式 \eqref{eq:grpo-loss} 用它提高组内较好轨迹的生成概率，降低较差轨迹的生成概率，并约束策略不要一次改变过大。图像化地看，训练在同题的多条候选路径中反复强化成功路径；推理时，模型依据更新后的参数逐 token 生成推理过程和答案，判题器与组内比较只出现在训练环节。
+这一节动的是第 4 条轴（训练信号）。语言模型的下一 token 损失学习怎样续写训练文本；数学答案和代码测试还提供了对整条回答的可验证反馈。DeepSeek-R1 在可验证任务的后训练中，把这类奖励与 GRPO 结合~\cite{deepseekr1}：同一道题由当前模型采样多条推理轨迹，判题器检查最终答案或代码结果，再比较同组轨迹的得分。若第 \(i\) 条轨迹得到奖励 \(r_i\)，核心比较量是式 \eqref{eq:grpo-advantage} 的组内标准化优势 \(A_i\)，它表示这条轨迹比同题其他尝试好多少。GRPO 按式 \eqref{eq:grpo-loss} 用它提高组内较好轨迹的生成概率，降低较差轨迹的生成概率，并约束策略不要一次改变过大。图像化地看，训练在同题的多条候选路径中反复强化成功路径；推理时，模型依据更新后的参数逐 token 生成推理过程和答案，判题器与组内比较只出现在训练环节。
 
 
 \section{Kimi Linear：固定工作记忆加可翻查的历史}
 
-这一节动的是第 1 条轴（历史读取）。完整注意力像一本可逐页翻查的档案：每个历史 token 都留下记录，长上下文的缓存和读取量随之增长。固定大小的递推状态像工作记忆，更新成本稳定，却会把许多过去的关联挤进同一份状态。固定状态也见于另一条路线：Mamba 用输入相关的状态空间递推维护定长记忆~\cite{gu2024mamba}。Kimi Linear 沿层的深度方向重复“KDA、KDA、KDA、MLA”这一组：同一 token 依次经过三层 KDA，再经过一层 MLA。KDA 层维护固定大小的状态，MLA 层则保留可按内容寻找较早 token 的压缩历史~\cite{kimilinear}。
+这一节动的是第 1 条轴（历史读取）。完整注意力像一本可逐页翻查的档案：每个历史 token 都留下记录，长上下文的缓存和读取量随之增长。固定大小的递推状态像工作记忆，更新成本稳定，却会把许多过去的关联挤进同一份状态。Kimi Linear 沿层的深度方向重复“KDA、KDA、KDA、MLA”这一组：同一 token 依次经过三层 KDA，再经过一层 MLA。KDA 层维护固定大小的状态，MLA 层则保留可按内容寻找较早 token 的压缩历史~\cite{kimilinear}。
 
 KDA 的关键是怎样维护这份有限状态。新 token 到来时，先按通道衰减过时关联，再用当前 key 从旧状态读出一个预测值，只把预测误差写回，最后由 query 读取更新后的状态。图 \ref{fig:kda-computation} 中的\textbf{衰减—纠错—读取}就是一次更新的全部动作：衰减控制保留多久，纠错减少新旧关联相互干扰。状态大小保持固定，周期性的 MLA 负责找回需要精确定位的历史细节。
 
@@ -132,15 +127,15 @@ KDA 的关键是怎样维护这份有限状态。新 token 到来时，先按通
 \label{fig:kda-computation}
 \end{figure}
 
-图中的更新可以写成一条递推式。令 \(S_{t-1}\) 为上一 token 留下的矩阵状态，\(\alpha_t\) 是每个 key 通道各自的保留比例，\(\beta_t\) 控制本次写入强度，\(q_t,k_t,v_t\) 来自当前输入：
+图中的更新可以写成一条递推式。令 \(S_{t-1}\in\R^{d_v\times d_k}\) 为上一 token 留下的矩阵状态，方向与第 \ref{chap:transformer} 章线性注意力的 \(S_t\) 相同；\(\alpha_t\) 是每个 key 通道各自的保留比例，\(\beta_t\) 控制本次写入强度，\(q_t,k_t,v_t\) 来自当前输入：
 \begin{equation}
 \begin{aligned}
-\widetilde S_{t-1}&=\operatorname{Diag}(\alpha_t)S_{t-1},\\
-S_t&=\widetilde S_{t-1}+\beta_t k_t\bigl(v_t-\widetilde S_{t-1}^{\mathsf T}k_t\bigr)^{\mathsf T},\qquad o_t=S_t^{\mathsf T}q_t.
+\widetilde S_{t-1}&=S_{t-1}\operatorname{Diag}(\alpha_t),\\
+S_t&=\widetilde S_{t-1}+\beta_t\bigl(v_t-\widetilde S_{t-1}k_t\bigr)k_t^{\mathsf T},\qquad o_t=S_tq_t.
 \end{aligned}
 \label{eq:kda-update}
 \end{equation}
-第一行逐通道保留旧记忆；第二行先用当前 key 从旧状态读出预测 \(\widetilde S_{t-1}^{\mathsf T}k_t\)，再把它与当前 token 的 value \(v_t\) 的差写回，最后用 query 读出 \(o_t\)。这正是图 \ref{fig:kda-computation} 的\textbf{衰减—纠错—读取}，也说明 KDA 如何用固定大小的状态持续修订键值关联~\cite{kimilinear}。
+第一行逐通道保留旧记忆；第二行先用当前 key 从旧状态读出预测 \(\widetilde S_{t-1}k_t\)，再把它与当前 token 的 value \(v_t\) 的差写回，最后用 query 读出 \(o_t\)。这正是图 \ref{fig:kda-computation} 的\textbf{衰减—纠错—读取}，也说明 KDA 如何用固定大小的状态持续修订键值关联~\cite{kimilinear}。
 
 训练时，\(q_t,k_t,v_t,\alpha_t,\beta_t\) 都由可学习的投影和门控从输入产生；下一 token 损失通过 KDA 的状态更新及 MLA 层一起反传。长序列可分块并行计算块内结果，块与块之间传递状态。推理时每生成一个 token，KDA 层更新一次 \(S_t\)，MLA 层则把该 token 的短内容摘要和位置键加入缓存。前者的状态大小固定，后者承担按位置找回远处细节的任务~\cite{kimilinear}。
 
@@ -191,7 +186,7 @@ DeepSeek-V4 先在不同任务上分别后训练领域专长模型，再用第 \
 
 \section{Kimi K3：沿序列、深度和专家三处继续改进}
 
-这一节沿第 1、3、2 条轴依次改动。Kimi K3 延续 Kimi Linear 的固定状态与可寻址历史组合，再处理三个新的限制：长序列递推的数值稳定、深层对早期表示的访问，以及大量专家之间的通信~\cite{kimmik3}。图 \ref{fig:kimi-k3-block} 的上排是序列路径，下排是深度路径；专家模块放在每层 FFN 的位置。下文的注意力残差（Attention Residuals，AttnRes）处理跨层读取，稳定潜空间专家混合（Stable Latent Mixture of Experts，Stable LatentMoE）处理专家计算。
+这一节沿第 1、3、2 条轴依次改动。Kimi K3 延续 Kimi Linear 的固定状态与可寻址历史组合，再处理三个新的限制：长序列递推的数值稳定、深层对早期表示的访问，以及大量专家之间的通信~\cite{kimik3}。图 \ref{fig:kimi-k3-block} 的上排是序列路径，下排是深度路径；专家模块放在每层 FFN 的位置。下文的注意力残差（Attention Residuals，AttnRes）处理跨层读取，稳定潜空间专家混合（Stable Latent Mixture of Experts，Stable LatentMoE）处理专家计算。
 
 \begin{figure}[H]
 \centering
@@ -202,13 +197,13 @@ DeepSeek-V4 先在不同任务上分别后训练领域专长模型，再用第 \
 
 \subsection{序列：稳定的 KDA 与可控的全局读取}
 
-KDA 的递推要在很长的序列上重复衰减与写入。K3 给衰减设定下界，避免反复更新时数值尺度走向极端；这提高长序列训练的稳定性。周期性的全局层继续使用 MLA，让模型直接找回较早的相关位置~\cite{kimmik3}。全局注意力读出历史后，Gated MLA 再根据当前 token 对各输出通道加门控：相关通道多写入当前表示，干扰较大的通道少写入。图 \ref{fig:kimi-k3-block} 上排的三个 KDA 层与一个 Gated MLA 层体现了固定状态和全局读取的分工。
+KDA 的递推要在很长的序列上重复衰减与写入。K3 给衰减设定下界，避免反复更新时数值尺度走向极端；这提高长序列训练的稳定性。周期性的全局层继续使用 MLA，让模型直接找回较早的相关位置~\cite{kimik3}。全局注意力读出历史后，Gated MLA 再根据当前 token 对各输出通道加门控：相关通道多写入当前表示，干扰较大的通道少写入。图 \ref{fig:kimi-k3-block} 上排的三个 KDA 层与一个 Gated MLA 层体现了固定状态和全局读取的分工。
 
-令 \(z_{t,j}\) 为 KDA 第 \(j\) 个 key 通道经过可学习缩放的衰减分数，K3 用 \(g_{t,j}=g_{\min}\operatorname{sigmoid}(z_{t,j})\)、\(\alpha_{t,j}=e^{g_{t,j}}\) 生成式 \eqref{eq:kda-update} 中的保留比例，其中 \(g_{\min}<0\)。这样 \(\alpha_{t,j}\) 有正的下界，分块并行训练时连续衰减的数值范围受到控制。对 MLA 读出的 \(\widetilde o_t\)，门控输出可写为 \(y_t=W_o[\operatorname{sigmoid}(W_gx_t)\odot\widetilde o_t]\)：当前 token 决定哪些历史通道进入下一层。训练时这些门控随下一 token 损失学习；推理时 KDA 继续逐 token 更新固定状态，MLA 缓存仍保留可按位置读取的历史~\cite{kimmik3}。
+令 \(z_{t,j}\) 为 KDA 第 \(j\) 个 key 通道经过可学习缩放的衰减分数，K3 用 \(g_{t,j}=g_{\min}\operatorname{sigmoid}(z_{t,j})\)、\(\alpha_{t,j}=e^{g_{t,j}}\) 生成式 \eqref{eq:kda-update} 中的保留比例，其中 \(g_{\min}<0\)。这样 \(\alpha_{t,j}\) 有正的下界，分块并行训练时连续衰减的数值范围受到控制。对 MLA 读出的 \(\widetilde o_t\)，门控输出可写为 \(y_t=W_o[\operatorname{sigmoid}(W_gx_t)\odot\widetilde o_t]\)：当前 token 决定哪些历史通道进入下一层。训练时这些门控随下一 token 损失学习；推理时 KDA 继续逐 token 更新固定状态，MLA 缓存仍保留可按位置读取的历史~\cite{kimik3}。
 
 \subsection{深度：AttnRes 按需翻回早期层}
 
-普通残差让信息逐层累加；AttnRes 则保留较早层块为同一 token 产生的输出，并用它们组成当前层的输入~\cite{kimmik3,attnres}。当前层 \(l\) 有一个训练得到的查询向量 \(w_l\)：它分别与各块输出的归一化表示做内积，得到每个块的匹配分数，再对所有可访问块的分数做 softmax。分数越高，该块输出在当前层输入中占的权重越大。这意味着，同一当前层面对不同 token 时，叠加先前各层输出所用的权重也可能不同；本层计算产生的新输出又成为更深层可读取的候选。图 \ref{fig:k3-attnres-depth} 将这条从已有输出到当前输入、再到新输出的路径画出来。这些块权重显示当前层读取了哪些较早的层，属于读取模式。
+普通残差让信息逐层累加；AttnRes 则保留较早层块为同一 token 产生的输出，并用它们组成当前层的输入~\cite{kimik3,attnres}。当前层 \(l\) 有一个训练得到的查询向量 \(w_l\)：它分别与各块输出的归一化表示做内积，得到每个块的匹配分数，再对所有可访问块的分数做 softmax。分数越高，该块输出在当前层输入中占的权重越大。这意味着，同一当前层面对不同 token 时，叠加先前各层输出所用的权重也可能不同；本层计算产生的新输出又成为更深层可读取的候选。图 \ref{fig:k3-attnres-depth} 将这条从已有输出到当前输入、再到新输出的路径画出来。这些块权重可以用来查看当前层主要读取了哪些较早的层。
 
 \begin{figure}[ht]
 \centering
@@ -231,7 +226,7 @@ r_l&=\sum_{j\in\mathcal B_l}a_{l,j}b_j.
 
 \subsection{专家：先压窄，再送入路由专家}
 
-普通专家并行把模型宽度的表示发往选中的专家，跨设备传输随激活专家数增加。Stable LatentMoE 先把路由分支压到较窄的潜空间，让专家在这个空间计算，再把聚合结果映射回模型宽度；共享专家仍接收完整表示~\cite{kimmik3}。若输入 \(x\in\mathbb R^d\)、压缩表示 \(z\in\mathbb R^\ell\) 且 \(\ell<d\)，\(E_i\) 是路由专家、\(p_i\) 是选中专家的混合权重，两条路径合起来可写为
+普通专家并行把模型宽度的表示发往选中的专家，跨设备传输随激活专家数增加。Stable LatentMoE 先把路由分支压到较窄的潜空间，让专家在这个空间计算，再把聚合结果映射回模型宽度；共享专家仍接收完整表示~\cite{kimik3}。若输入 \(x\in\mathbb R^d\)、压缩表示 \(z\in\mathbb R^\ell\) 且 \(\ell<d\)，\(E_i\) 是路由专家、\(p_i\) 是选中专家的混合权重，两条路径合起来可写为
 \begin{equation}
 z=W^{\downarrow}x,\qquad
 u=\sum_{i\in\mathcal T(x)}p_iE_i(z),\qquad
@@ -260,4 +255,4 @@ y=\sum_j E_j^{\mathrm{shared}}(x)+W^{\uparrow}\operatorname{RMSNorm}(u).
 \label{fig:k3-latent-moe}
 \end{figure}
 
-图 \ref{fig:k3-latent-moe} 中，路由专家收到较窄的任务摘要 \(z\)，跨设备传送的也是这份低维表示。聚合后的归一化控制路由分支的尺度；专家内部的 SiTU-GLU 用平滑的 \(\beta\tanh(a/\beta)\) 限制大激活。训练时，下一 token 损失更新降维与升维投影、路由器、共享专家和选中的路由专家；Quantile Balancing 则根据一批 token 的路由分数分位数直接调整下一步的专家选择偏置，使各专家接近目标负载。推理时依据路由分数与训练结束时保留的偏置选专家，只向路由专家传送低维 \(z\)，再把两条路径的结果相加~\cite{kimmik3}。
+图 \ref{fig:k3-latent-moe} 中，路由专家收到较窄的任务摘要 \(z\)，跨设备传送的也是这份低维表示。聚合后的归一化控制路由分支的尺度；专家内部的 SiTU-GLU 用平滑的 \(\beta\tanh(a/\beta)\) 限制大激活。训练时，下一 token 损失更新降维与升维投影、路由器、共享专家和选中的路由专家；Quantile Balancing 则根据一批 token 的路由分数分位数直接调整下一步的专家选择偏置，使各专家接近目标负载。推理时依据路由分数与训练结束时保留的偏置选专家，只向路由专家传送低维 \(z\)，再把两条路径的结果相加~\cite{kimik3}。

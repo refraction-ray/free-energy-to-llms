@@ -2,7 +2,7 @@
 \label{chap:training-methods}
 
 \begin{keybox}[训练阶段改变的是同一个分布的哪一部分]
-本章讨论的对象是自回归大语言模型，即前面推导过的 \(p_\theta(x_{1:T})=\prod_t p_\theta(x_t\mid x_{<t})\) 这一族模型。预训练用 MLE 在无标注语料上估计 \(p(x)\)；SFT（Supervised Fine-Tuning，监督微调）用成对的指令与答案把条件分布收缩到“回答问题”这一子集；人类反馈强化学习（Reinforcement Learning from Human Feedback，RLHF）和可验证奖励强化学习（Reinforcement Learning with Verifiable Rewards，RLVR）则改变输出的\textbf{相对权重}，让高奖励行为获得更多概率质量。推理训练进一步用解题轨迹或奖励强化生成中间步骤的行为。这些训练方式都沿用同一套自回归分解，差别在于经验分布 \(\hat\pi\) 由谁提供、以及目标里是否出现奖励项；蒸馏让另一个模型来提供这两者。
+本章讨论的对象是自回归大语言模型，即前面推导过的 \(p_\theta(x_{1:T})=\prod_t p_\theta(x_t\mid x_{<t})\) 这一族模型。预训练用 MLE 在无标注语料上估计 \(p(x)\)；SFT 用成对的指令与答案把条件分布收缩到“回答问题”这一子集；人类反馈强化学习（Reinforcement Learning from Human Feedback，RLHF）和可验证奖励强化学习（Reinforcement Learning with Verifiable Rewards，RLVR）则改变输出的\textbf{相对权重}，让高奖励行为获得更多概率质量。推理训练进一步用解题轨迹或奖励强化生成中间步骤的行为。这些训练方式都沿用同一套自回归分解，差别在于经验分布 \(\hat\pi\) 由谁提供、以及目标里是否出现奖励项；蒸馏让另一个模型来提供这两者。
 \end{keybox}
 
 \begin{figure}[H]
@@ -28,13 +28,13 @@ RLHF 与 RLVR 的区别在反馈来源。RLHF 通常把人类对回答的比较�
 
 预训练把大量无标注文本当作“给定前缀预测下一 token”的样本，用统计规律学习通用表示。其数学目标已在第 \ref{sec:autoregressive} 节给出：在语料经验分布 \(\hat\pi\) 上最小化负对数似然，等价于最小化 \(\KL(\hat\pi\Vert p_\theta)\)。实际系统中真正需要决定的是另外三件事，它们共同决定了模型最终能覆盖什么。
 
-数据从哪来，决定了 \(\hat\pi\) 的形状。预训练语料通常由网页文本、代码、书籍、论文、百科和多语言内容混合而成。原始网页包含大量模板、广告、重复段落和机器生成文本，需要经过正文抽取、语言识别、长度与符号比例过滤、质量分类器打分和去重。去重分为完全重复和近似重复：前者用哈希，后者用 MinHash 或 n-gram 重叠；重复数据会让模型记住片段，也会让验证集与训练集重叠。代码和数学数据提供结构化推理的样本，比例过高会改变语言风格；合成数据可以补充稀缺格式，但需要保留真实数据作为锚点。第 \ref{chap:data-patterns} 章会把这些问题放在数据审计的框架里。
+数据从哪来，决定了 \(\hat\pi\) 的形状。预训练语料通常由网页文本、代码、书籍、论文、百科和多语言内容混合而成。原始网页包含大量模板、广告、重复段落和机器生成文本，需要经过正文抽取、语言识别、长度与符号比例过滤、质量分类器打分和去重。去重分为完全重复和近似重复；重复数据会让模型记住片段，也会让验证集与训练集重叠。代码和数学数据提供结构化推理的样本，比例过高会改变语言风格；合成数据可以补充稀缺格式，但需要保留真实数据作为锚点。第 \ref{chap:data-patterns} 章会把这些问题放在数据审计的框架里。
 
 第一是\textbf{数据配比决定经验分布}。若语料由多个来源混合，\(\hat\pi=\sum_k\alpha_k\hat\pi_k\)，则改变权重 \(\alpha_k\) 就改变了被优化的目标，即使总 token 数不变。代码、数学、多语言和长文档的比例，本质上是在指定“哪些模式值得分配概率质量”。这与第 \ref{chap:data-patterns} 章的数据审计讨论的是同一件事，只是发生在训练之前。
 
 第二是\textbf{规模配比}。参数量、训练 token 数和计算预算共同影响预训练效果；固定预算下，模型并非越大越好，还须给它足够的数据。第 \ref{sec:training-scaling} 节将用 scaling law 说明怎样配平这些规模，以及为什么实际部署有时选择另一种配比。
 
-第三是\textbf{长程训练本身不稳定}。大规模预训练会出现 loss spike（损失突升）：某些 step 的梯度范数远超正常水平，若不加处理，可能让优化器状态被污染并使损失永久性变差。常见处理是回滚到 spike 之前的 checkpoint、跳过该 batch 的数据、临时降低学习率或收紧梯度裁剪阈值，同时用查询与键归一化（Query--Key Normalization，QK-Norm）、SwiGLU 输出限幅等结构约束（见后文表 \ref{tab:training-stability-mechanisms}）先把产生 spike 的路径收窄。
+第三是\textbf{长程训练本身不稳定}。大规模预训练会出现 loss spike（损失突升）：某些 step 的梯度范数远超正常水平，若不加处理，可能让优化器状态被污染并使损失永久性变差。常见处理是回滚到 spike 之前的检查点、跳过该 batch 的数据、临时降低学习率或收紧梯度裁剪阈值，同时用 QK-Norm、SwiGLU 输出限幅等结构约束（见后文表 \ref{tab:training-stability-mechanisms}）先把产生 spike 的路径收窄。
 
 预训练给出的 \(p_0(x)\) 是一个通用文本分布的近似，它同时包含有帮助的续写、有害内容、错误陈述和格式混乱的输出，其中“回答问题”只是它覆盖的一小部分模式。把它转成能稳定遵循指令的模型，需要后面两个阶段。
 
@@ -73,7 +73,7 @@ SFT 规定了训练数据和损失，但还没有规定哪些参数随梯度更�
 
 \subsection{反馈来源与 KL 正则：后训练的共同目标}
 
-SFT 只示范合格回答，后训练还需要判断哪个回答更好。这里先区分反馈来源：\textbf{RLHF} 从人类对回答的比较学习偏好，经典路线是用这些比较训练奖励模型，再用 PPO 在线更新语言模型；\textbf{RLVR} 用数学答案、代码测试等程序可验证的结果直接给奖励，常与 GRPO 等在线更新结合。PPO、GRPO 与留一法策略梯度（REINFORCE Leave-One-Out，RLOO）是怎样用奖励更新策略的方法；RLHF、RLVR 说明奖励从哪里来。直接偏好优化（Direct Preference Optimization，DPO）则直接学习固定的人类偏好对，属于离线偏好优化，不进行在线强化学习。
+SFT 只示范合格回答，后训练还需要判断哪个回答更好。这里先区分反馈来源：\textbf{RLHF} 从人类对回答的比较学习偏好，经典路线是用这些比较训练奖励模型，再用 PPO 在线更新语言模型；\textbf{RLVR} 用数学答案、代码测试等程序可验证的结果直接给奖励，常与 GRPO 等在线更新结合。PPO、GRPO 与留一法策略梯度（REINFORCE Leave-One-Out，RLOO）是怎样用奖励更新策略的方法；RLHF、RLVR 说明奖励从哪里来。直接偏好优化（Direct Preference Optimization，DPO）则直接学习固定的人类偏好对，属于离线偏好优化，不进行在线强化学习。三类反馈来源与常见训练搭配见表 \ref{tab:posttraining-families}。
 
 给定某种反馈得到的回答级奖励 \(r(x)\)，可以解一个带参考分布约束的优化问题：
 \begin{equation}
@@ -81,7 +81,7 @@ SFT 只示范合格回答，后训练还需要判断哪个回答更好。这里�
  \qquad\Longrightarrow\qquad
  q^*(x)\propto p_0(x)\exp\!\left(\frac{r(x)}{\tau}\right),\label{eq:kl-tilted-opt}
 \end{equation}
-式 \eqref{eq:kl-tilted-opt} 的最优解表明：奖励决定分布往哪个方向偏移，\(\tau\) 决定偏移多快，\(p_0\) 决定哪些区域本来就有概率质量——策略不可能凭空获得参考分布之外的行为。因此参考模型，也就是预训练模型，决定了后训练能到达的区域。
+式 \eqref{eq:kl-tilted-opt} 的最优解表明：奖励决定分布往哪个方向偏移，\(\tau\) 决定偏移多快，\(p_0\) 决定哪些区域本来就有概率质量——策略不可能凭空获得参考分布之外的行为。因此参考模型决定了后训练能到达的区域；它通常是后训练开始前的 SFT 模型，概率质量的分布主要继承自预训练。
 
 这个最优解可以直接验证。记 \(Z=\E_{p_0}[e^{r(x)/\tau}]\)，把右边的归一化分布记作 \(q^*=p_0e^{r/\tau}/Z\)，即 \(r=\tau\log(q^*/p_0)+\tau\log Z\)。代入目标，
 \begin{equation}
@@ -176,11 +176,11 @@ PPO 还要维护 critic \(V_\phi\)，它可以是独立网络，也可以是模�
 \end{equation}
 它比只有终局奖励时的 \(R_i-V_\phi(s_{i,t})\) 多出从位置 \(t\) 到结尾的 KL 累计；只累计 \(t\) 之后的项，是因为位置 \(t\) 的选择改变不了此前已写出的 token。critic 的训练标签相应改为从位置 \(t\) 到结尾的信号之和
 \begin{equation}
- G_{i,t}=\sum_{t'=t}^{T_i}r_{i,t'}=R_i-\beta\sum_{t'=t}^{T_i}\log\frac{\pi_{\mathrm{old}}(y_{i,t'}\mid s_{i,t'})}{\pi_{\mathrm{ref}}(y_{i,t'}\mid s_{i,t'})},
+ V^{\mathrm{tgt}}_{i,t}=\sum_{t'=t}^{T_i}r_{i,t'}=R_i-\beta\sum_{t'=t}^{T_i}\log\frac{\pi_{\mathrm{old}}(y_{i,t'}\mid s_{i,t'})}{\pi_{\mathrm{ref}}(y_{i,t'}\mid s_{i,t'})},
  \qquad
- \mathcal L_V(\phi)=\bigl(V_\phi(s_{i,t})-G_{i,t}\bigr)^2 .
+ \mathcal L_V(\phi)=\bigl(V_\phi(s_{i,t})-V^{\mathrm{tgt}}_{i,t}\bigr)^2 .
 \end{equation}
-\(G_{i,t}\) 由采样数据算出，是一个固定的数。一般的 \(\lambda<1\) 时，实现中常取 \(G_{i,t}=\widehat A_{i,t}+V_{\mathrm{old}}(s_{i,t})\)，其中 \(V_{\mathrm{old}}\) 是计算优势时 critic 的输出，同样作为常数，不随 \(\phi\) 变化；\(\lambda=1\) 时两种写法一致。标签里含 KL 项，所以 \(V_\phi\) 学到的是扣除 KL 后的期望回报，不再是式 \eqref{eq:ppo-critic-target} 中单纯的终局分数期望。归纳起来，KL 直接加在 \(r\) 上，经 GAE 进入 \(\widehat A\)，经训练标签 \(G\) 进入 \(V\)；式 \eqref{eq:ppo-clip} 用的 \(\widehat A_{i,t}\) 已经包含它，所以那里不必再写单独的 KL 项。KL 惩罚因此完全通过 \(\widehat A_{i,t}\) 的数值影响更新：一个 token 之后的续写偏离参考模型越多，它的优势越小，概率被抬高得越少，甚至被压低。第 \ref{sec:kl-placement} 节解释这样做为什么等价于 KL 正则目标，并与 GRPO 的放法比较。
+\(V^{\mathrm{tgt}}_{i,t}\) 由采样数据算出，是一个固定的数。一般的 \(\lambda<1\) 时，实现中常取 \(V^{\mathrm{tgt}}_{i,t}=\widehat A_{i,t}+V_{\mathrm{old}}(s_{i,t})\)，其中 \(V_{\mathrm{old}}\) 是计算优势时 critic 的输出，同样作为常数，不随 \(\phi\) 变化；\(\lambda=1\) 时两种写法一致。标签里含 KL 项，所以 \(V_\phi\) 学到的是扣除 KL 后的期望回报，不再是式 \eqref{eq:ppo-critic-target} 中单纯的终局分数期望。归纳起来，KL 直接加在 \(r\) 上，经 GAE 进入 \(\widehat A\)，经训练标签 \(V^{\mathrm{tgt}}\) 进入 \(V\)；式 \eqref{eq:ppo-clip} 用的 \(\widehat A_{i,t}\) 已经包含它，所以那里不必再写单独的 KL 项。KL 惩罚因此完全通过 \(\widehat A_{i,t}\) 的数值影响更新：一个 token 之后的续写偏离参考模型越多，它的优势越小，概率被抬高得越少，甚至被压低。第 \ref{sec:kl-placement} 节解释这样做为什么等价于 KL 正则目标，并与 GRPO 的放法比较。
 
 PPO 需要额外训练 critic；若配合 RLHF 的奖励模型，还要承担奖励模型的误差。策略会主动搜索后者的高分区，可能从“回答更好”漂移到“更符合奖励模型的刻板特征”，形成 reward hacking。KL 项只能限制漂移幅度，不能修正奖励本身的偏差。
 
@@ -190,11 +190,11 @@ GRPO/RLOO 同样沿第 \ref{sec:gradient-estimator-map} 节的 score-function �
 
 当同一问题能采样多个答案时，可以用答案之间的分数差作基线，省去训练 critic 的成本。同一个问题上采样 \(G\) 个完整回答，同一个冻结的奖励模型或判题器先分别给它们打分 \(r_1,\ldots,r_G\)。GRPO 用组内均值作 baseline，并常按组内标准差归一化；RLOO 则对每条回答使用其余 \(G-1\) 条回答的平均奖励作 baseline~\cite{shao2024grpo,ahmadian2024rloo}：
 \begin{equation}
- A_i^{\mathrm{GRPO}}=\frac{r_i-\operatorname{mean}(r_1,\ldots,r_G)}{\operatorname{std}(r_1,\ldots,r_G)+\delta},\qquad
+ A_i^{\mathrm{GRPO}}=\frac{r_i-\operatorname{mean}(r_1,\ldots,r_G)}{\operatorname{std}(r_1,\ldots,r_G)+\epsilon_0},\qquad
  A_i^{\mathrm{RLOO}}=r_i-\frac{1}{G-1}\sum_{j\neq i}r_j,
  \label{eq:grpo-advantage}
 \end{equation}
-其中小常数 \(\delta\) 防止全组同分时除零。高于组内基线的轨迹优势为正，低于基线的为负。这个轨迹优势代替 PPO 的逐位置 \(\widehat A_{i,t}\)，放进同样的裁剪目标，并直接加上对参考模型的 KL 项：
+其中小常数 \(\epsilon_0\) 防止全组同分时除零。高于组内基线的轨迹优势为正，低于基线的为负。这个轨迹优势代替 PPO 的逐位置 \(\widehat A_{i,t}\)，放进同样的裁剪目标，并直接加上对参考模型的 KL 项：
 \begin{equation}
  \mathcal L_{\mathrm{GRPO}}(\theta)
  =-\frac1G\sum_{i=1}^{G}\frac1{T_i}\sum_{t=1}^{T_i}
@@ -211,7 +211,7 @@ GRPO/RLOO 同样沿第 \ref{sec:gradient-estimator-map} 节的 score-function �
 \subsection{KL 约束放在哪里：优势还是损失}
 \label{sec:kl-placement}
 
-式 \eqref{eq:ppo-clip} 里没有 KL 项，式 \eqref{eq:grpo-loss} 里有。两种方法其实都在实现式 \eqref{eq:kl-tilted-opt} 中的 \(-\tau\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)，区别只在放的位置：PPO 把它放进 GAE 读入的逐位置信号，因而藏在优势里；GRPO 把它直接写进损失。先要分清两种“不要走太远”的约束。
+式 \eqref{eq:ppo-clip} 里没有 KL 项，式 \eqref{eq:grpo-loss} 里有。两种方法都想实现式 \eqref{eq:kl-tilted-opt} 中的 \(-\tau\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)；PPO 把它放进 GAE 读入的逐位置信号，GRPO 把它直接写进损失。放法不同，所用估计量也不同，两者实际得到的梯度并不相同（式 \eqref{eq:kl-grad-compare}）。先要分清两种“不要走太远”的约束（表 \ref{tab:two-constraints}）。
 
 \begin{table}[H]
 \centering\small
@@ -261,17 +261,17 @@ GRPO/RLOO 同样沿第 \ref{sec:gradient-estimator-map} 节的 score-function �
  \label{eq:k3-estimator}
 \end{equation}
 下面省略下标 \(i,t\)，只看一个位置上的已采样 token \(y\)，记 \(k_1=-\log u=\log(\pi_\theta/\pi_{\mathrm{ref}})\)，\(k_3=u-\log u-1\)，以及
-\[
+\begin{equation}
  g(y)=\nabla_\theta\log\pi_\theta(y\mid s),
-\]
+\end{equation}
 即这个 token 的对数概率对参数的梯度：参数沿 \(+g\) 走一小步，\(\pi_\theta(y\mid s)\) 升高；沿 \(-g\) 走，它降低。比较两种放法，要分清三个问题：估计量的数值估的是什么；精确的 KL 梯度是什么；实际实现算出的又是什么。结论是：\(k_1\) 和 \(k_3\) 估的都是 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)；PPO 的做法算出的是它的精确梯度；GRPO 直接对 \(k_3\) 反传，算出的只是精确梯度的一部分，这一部分在期望上恰好等于交换两个参数后的 \(\KL(\pi_{\mathrm{ref}}\Vert\pi_\theta)\) 的梯度。这些结论都是在固定前缀的单个位置上得到的；推到整条回答时还要计入前缀分布的变化，最后单独说明。
 
 \textbf{数值：两者都估 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)。}样本来自 \(\pi_\theta\)，\(\E_{\pi_\theta}[k_1]=\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\) 就是定义。对 \(k_3\) 逐项取期望，
-\[
+\begin{equation}
  \E_{\pi_\theta}[k_3]=\E_{\pi_\theta}[u]+\E_{\pi_\theta}[k_1]-1,
  \qquad
  \E_{\pi_\theta}[u]=\sum_y\pi_\theta(y)\frac{\pi_{\mathrm{ref}}(y)}{\pi_\theta(y)}=\sum_y\pi_{\mathrm{ref}}(y)=1,
-\]
+\end{equation}
 所以 \(\E_{\pi_\theta}[k_3]=\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)。\(k_3\) 的好处在单样本上：\(u-1\) 期望为零，加进去不改变期望，只抵消 \(k_1\) 的波动，作用类似策略梯度中的基线，更一般的名字是控制变量。具体地，\(u=1\) 附近 \(k_1=-(u-1)+\tfrac12(u-1)^2-\cdots\)，加上 \(u-1\) 正好消去可正可负的一阶项，\(k_3=\tfrac12(u-1)^2-\cdots\)；由 \(\log u\le u-1\)，每个样本的 \(k_3\) 都非负，方差通常也比 \(k_1\) 小。
 
 \textbf{精确梯度：两部分之和。}任取一个估计量 \(k(y;\theta)\)，它的期望对 \(\theta\) 求导时，采样分布和被平均的数值都依赖 \(\theta\)：
@@ -282,12 +282,10 @@ GRPO/RLOO 同样沿第 \ref{sec:gradient-estimator-map} 节的 score-function �
  \label{eq:estimator-grad-split}
 \end{equation}
 这是式 \eqref{eq:ppo-kl-grad-split} 对一般估计量的写法。由于 \(\nabla_\theta k_1=g\)、\(\nabla_\theta k_3=(1-u)\,g\)，对两个估计量分别有
-\[
-\begin{aligned}
+\begin{align}
  k_1:&\quad \nabla_\theta\KL=\E_{\pi_\theta}[k_1\,g]+\underbrace{\E_{\pi_\theta}[g]}_{=0}=\E_{\pi_\theta}[k_1\,g],\\
  k_3:&\quad \nabla_\theta\KL=\E_{\pi_\theta}[k_3\,g]+\E_{\pi_\theta}\bigl[(1-u)\,g\bigr]=\E_{\pi_\theta}\bigl[(k_3+1-u)\,g\bigr]=\E_{\pi_\theta}[k_1\,g].
-\end{aligned}
-\]
+\end{align}
 两者的精确梯度当然相同，都是式 \eqref{eq:kl-score-grad}。区别在于各部分的分量：对 \(k_1\)，全部来自“采样分布变化”；对 \(k_3\)，两部分各占一份。
 
 \textbf{实际算出的：PPO 取前一部分，GRPO 取后一部分。}PPO 把 \(k_1\) 当常数权重填进逐位置信号，经优势乘在 \(g\) 上，算的是“采样分布变化”一项；对 \(k_1\) 而言这就是全部，所以 PPO 得到 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\) 的精确梯度。单个样本的 \(k_1\) 为负也没有问题：负权重抬高一个被策略低估的 token，正是往 \(\pi_{\mathrm{ref}}\) 拉回。GRPO 把 \(k_3\) 写进损失，对固定的 rollout 样本直接反传，自动微分只算“估计量本身变化”一项，看不到“换一个 \(\theta\) 会采到别的 token”。这一项对 \(k_1\) 期望为零，所以单把 \(k_1\) 放进损失反传约束不住偏移；对 \(k_3\) 它不为零，且可以算出来：
@@ -306,13 +304,13 @@ GRPO/RLOO 同样沿第 \ref{sec:gradient-estimator-map} 节的 score-function �
 
 两种梯度都是“权重乘以 \(g\)”：PPO 的权重是 \(k_1=\log(1/u)\)，GRPO 的权重是 \(1-u\)。两者在 \(u=1\) 处都为零，一阶相同，所以 \(\beta\) 较小、\(\pi_\theta\) 离 \(\pi_{\mathrm{ref}}\) 不远时差别不大。偏离较大时差别显现。最小化时参数沿 \(-w\,g\) 移动：对策略比参考模型更看好的 token（\(u<1\)），两者都压低它，PPO 的权重随 \(u\to0\) 无界增长，GRPO 的不超过 \(1\)；对策略已经放弃、参考模型仍看好的 token（\(u>1\)），两者都抬高它，GRPO 的权重随 \(u\) 线性增长，PPO 只按对数增长。因此 GRPO 的 KL 项更强烈地阻止策略丢掉参考模型覆盖的 token，PPO 则对策略过度集中的 token 罚得更重。对照图 \ref{fig:kl-direction} 的记法，把 \(\pi_{\mathrm{ref}}\) 看作目标 \(p\)、\(\pi_\theta\) 看作拟合分布 \(q\)：GRPO 对应左栏的 \(\KL(p\Vert q)\)，倾向覆盖参考模型的所有模式；PPO 对应右栏的 \(\KL(q\Vert p)\)。
 
-\textbf{单个位置的结论不能直接推到整条回答。}上面都固定了前缀 \(s\)。整条回答的 KL 由式 \eqref{eq:sequence-kl-chain} 写成各位置之和，但前缀 \(s_t\) 本身也由 \(\pi_\theta\) 生成，对 \(\theta\) 求导时还要计入前缀分布的变化~\cite{tang2025klpitfalls}。对 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)，用 score function 展开，记 \(g_k=\nabla_\theta\log\pi_\theta(y_k\mid s_k)\)、\(k_{1,t}=\log[\pi_\theta(y_t\mid s_t)/\pi_{\mathrm{ref}}(y_t\mid s_t)]\)，得
+\textbf{单个位置的结论不能直接推到整条回答。}上面都固定了前缀 \(s\)。整条回答的 KL 由式 \eqref{eq:sequence-kl-chain} 写成各位置之和，但前缀 \(s_t\) 本身也由 \(\pi_\theta\) 生成，对 \(\theta\) 求导时还要计入前缀分布的变化~\cite{tang2025klpitfalls}。对 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)，用 score function 展开，记 \(g_j=\nabla_\theta\log\pi_\theta(y_j\mid s_j)\)、\(k_{1,t}=\log[\pi_\theta(y_t\mid s_t)/\pi_{\mathrm{ref}}(y_t\mid s_t)]\)，得
 \begin{equation}
  \nabla_\theta\KL\bigl(\pi_\theta(\cdot\mid c)\Vert\pi_{\mathrm{ref}}(\cdot\mid c)\bigr)
- =\E_{y\sim\pi_\theta}\Bigl[\sum_{k=1}^{T}g_k\sum_{t=k}^{T}k_{1,t}\Bigr].
+ =\E_{y\sim\pi_\theta}\Bigl[\sum_{j=1}^{T}g_j\sum_{t=j}^{T}k_{1,t}\Bigr].
  \label{eq:seq-kl-grad}
 \end{equation}
-位置 \(t\) 的对数比不仅乘在本位置的 \(g_t\) 上，也乘在此前各位置的 \(g_k\) 上，因为前面的 token 决定了后面的前缀。这正是式 \eqref{eq:ppo-kl-advantage} 中优势对 \(t\) 之后 KL 的累计，所以 PPO 经优势算出的就是整条回答 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\) 的梯度，与式 \eqref{eq:kl-tilted-opt} 的目标一致；只保留对角项 \(g_tk_{1,t}\)，就漏掉了前缀分布变化的贡献。GRPO 的 \(\widehat{\KL}_{i,t}\) 只作用于本位置，期望梯度是在当前策略生成的前缀上逐位置的局部梯度之和，\(\E_{y\sim\pi_\theta}\bigl[\sum_t\nabla_\theta\KL(\pi_{\mathrm{ref}}(\cdot\mid s_t)\Vert\pi_\theta(\cdot\mid s_t))\bigr]\)。整条回答 \(\KL(\pi_{\mathrm{ref}}\Vert\pi_\theta)\) 的梯度却是 \(-\E_{y\sim\pi_{\mathrm{ref}}}\bigl[\sum_tg_t\bigr]\)，前缀来自 \(\pi_{\mathrm{ref}}\)。两者前缀分布不同，GRPO 也没有计入前缀分布随 \(\theta\) 的变化，所以它只是各位置局部约束之和。准确的说法是：单个位置上，GRPO 的 KL 梯度对应 \(\KL(\pi_{\mathrm{ref}}\Vert\pi_\theta)\)；整条回答上，它不对应任何一种参数顺序的序列 KL。\(\pi_\theta\) 接近 \(\pi_{\mathrm{ref}}\) 时两种前缀分布相近，这一差别才可以忽略。
+位置 \(t\) 的对数比不仅乘在本位置的 \(g_t\) 上，也乘在此前各位置的 \(g_j\) 上，因为前面的 token 决定了后面的前缀。这正是式 \eqref{eq:ppo-kl-advantage} 中优势对 \(t\) 之后 KL 的累计，所以 PPO 经优势算出的就是整条回答 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\) 的梯度，与式 \eqref{eq:kl-tilted-opt} 的目标一致；只保留对角项 \(g_tk_{1,t}\)，就漏掉了前缀分布变化的贡献。GRPO 的 \(\widehat{\KL}_{i,t}\) 只作用于本位置，期望梯度是在当前策略生成的前缀上逐位置的局部梯度之和，\(\E_{y\sim\pi_\theta}\bigl[\sum_t\nabla_\theta\KL(\pi_{\mathrm{ref}}(\cdot\mid s_t)\Vert\pi_\theta(\cdot\mid s_t))\bigr]\)。整条回答 \(\KL(\pi_{\mathrm{ref}}\Vert\pi_\theta)\) 的梯度却是 \(-\E_{y\sim\pi_{\mathrm{ref}}}\bigl[\sum_tg_t\bigr]\)，前缀来自 \(\pi_{\mathrm{ref}}\)。两者前缀分布不同，GRPO 也没有计入前缀分布随 \(\theta\) 的变化，所以它只是各位置局部约束之和。准确的说法是：单个位置上，GRPO 的 KL 梯度对应 \(\KL(\pi_{\mathrm{ref}}\Vert\pi_\theta)\)；整条回答上，它不对应任何一种参数顺序的序列 KL。\(\pi_\theta\) 接近 \(\pi_{\mathrm{ref}}\) 时两种前缀分布相近，这一差别才可以忽略。
 
 \textbf{同一个对数比的三种用法。}PPO 把 \(\log(\pi_\theta/\pi_{\mathrm{ref}})\) 当作额外惩罚填进逐位置信号、进而进入优势；GRPO 把它的变形当作损失项；下一小节的 DPO 则反过来，利用式 \eqref{eq:kl-tilted-opt} 的最优解把这个对数比本身当作奖励：最优策略与参考模型的对数比，差一个只依赖提示的常数，就是奖励（式 \eqref{eq:dpo-reward-inversion}）。
 
@@ -405,9 +403,9 @@ PPO 用 critic 估计逐位置优势；GRPO/RLOO 用同题完整回答之间的�
 
 \begin{itemize}
   \item \textbf{Reward hacking}：策略找到奖励函数或判题器的漏洞，训练奖励继续上升而真实质量下降。检验方式是留出独立评审，与训练曲线分开看。
-  \item \textbf{KL 崩塌与分布坍缩}：\(\tau\) 过小或 KL 系数过低会让 \(q^*\) 集中到极少数高奖励模式，语言多样性和长尾能力同时消失。这里损失的是输出分布的多样性；VAE 的后验塌缩描述的是潜变量不再携带样本信息，诊断量不同。
+  \item \textbf{分布坍缩}：\(\tau\) 过小或 KL 系数过低会让 \(q^*\) 集中到极少数高奖励模式，语言多样性和长尾能力同时消失。这里损失的是输出分布的多样性；VAE 的后验坍缩描述的是潜变量不再携带样本信息，诊断量不同。
   \item \textbf{长度偏置}：如果奖励模型或标注者对较长回答有系统性偏好，策略会学到“变长”本身，输出冗长且信息密度下降。
-  \item \textbf{熵塌缩}：连续多步 RL 后策略分布变尖，采样集中到少数模板，探索能力下降，后续改进变慢。这也是组相对方法中“全部答对则优势为零”问题的极端表现。
+  \item \textbf{熵坍缩}：连续多步 RL 后策略分布变尖，采样集中到少数模板，探索能力下降，后续改进变慢。这也是组相对方法中“全部答对则优势为零”问题的极端表现。
 \end{itemize}
 
 \section{推理式扩展：RLVR 的推理侧}
@@ -457,7 +455,7 @@ on-policy 蒸馏 & 学生 & 学生前缀上的下一 \mbox{token} 分布 & 逐�
 
 \subsection{前向 KL：教师代替经验分布}
 
-预训练在语料的经验分布上、SFT 在人工示范的经验分布上最小化 \(\KL(\hat\pi\Vert p_\theta)\)：\(\hat\pi\) 是要拟合的目标，\(p_\theta\) 是正在训练的模型。预训练得到的模型在后训练中充当参考模型 \(\pi_{\mathrm{ref}}\)，那里的 KL 写作 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)，作用是限制偏移，与这里作为拟合目标的 \(\hat\pi\) 角色不同。把 \(\hat\pi\) 换成教师在提示 \(c\) 下的回答分布 \(\pi_T(\cdot\mid c)\)，就得到最直接的蒸馏目标 \(\E_c\KL(\pi_T(\cdot\mid c)\Vert\pi_\theta(\cdot\mid c))\)。记前缀 \(s_t=(c,y_{<t})\)，由链式分解，
+预训练在语料的经验分布上、SFT 在人工示范的经验分布上最小化 \(\KL(\hat\pi\Vert p_\theta)\)：\(\hat\pi\) 是要拟合的目标，\(p_\theta\) 是正在训练的模型。后训练开始时的模型（通常是 SFT 模型）充当参考模型 \(\pi_{\mathrm{ref}}\)，那里的 KL 写作 \(\KL(\pi_\theta\Vert\pi_{\mathrm{ref}})\)，作用是限制偏移，与这里作为拟合目标的 \(\hat\pi\) 角色不同。把 \(\hat\pi\) 换成教师在提示 \(c\) 下的回答分布 \(\pi_T(\cdot\mid c)\)，就得到最直接的蒸馏目标 \(\E_c\KL(\pi_T(\cdot\mid c)\Vert\pi_\theta(\cdot\mid c))\)。记前缀 \(s_t=(c,y_{<t})\)，由链式分解，
 \begin{equation}
  \KL\bigl(\pi_T(\cdot\mid c)\Vert\pi_\theta(\cdot\mid c)\bigr)
  =\E_{y\sim\pi_T}\!\left[\sum_{t}\log\frac{\pi_T(y_t\mid s_t)}{\pi_\theta(y_t\mid s_t)}\right]
@@ -515,7 +513,7 @@ Exposure bias 的根源是训练前缀来自教师。on-policy 蒸馏改由学�
  =\E_c\,\E_{y\sim\pi_\theta}\Bigl[\sum_{t}g_t\sum_{t'\ge t}k_{t'}\Bigr],\qquad g_t=\nabla_\theta\log\pi_\theta(y_t\mid s_t).
  \label{eq:on-policy-kd-grad}
 \end{equation}
-这是一个策略梯度：位置 \(t\) 的奖励是 \(-k_t=\log\pi_T(y_t\mid s_t)-\log\pi_\theta(y_t\mid s_t)\)，每个 token 的权重是它之后奖励的累计。on-policy 蒸馏因此是一种强化学习，奖励由教师逐 token 给出。以学生写出“\(17\times23=381\)”为例：GRPO 只知道整条回答错了，给所有 token 同一个负优势；这里教师在前缀“\(17\times23=\)”之后给“381”极低的概率，\(k_t\) 在这个 token 上很大，在前面的 token 上接近零，信号直接落在出错的位置。长度为 \(T\) 的回答得到 \(T\) 个信号，而不是一个。
+这是一个策略梯度：位置 \(t\) 的奖励是 \(-k_t=\log\pi_T(y_t\mid s_t)-\log\pi_\theta(y_t\mid s_t)\)，每个 token 的权重是它之后奖励的累计。on-policy 蒸馏因此是一种强化学习，奖励由教师逐 token 给出。以学生写出“\(17\times23=381\)”为例：GRPO 只知道整条回答错了，给所有 token 同一个负优势；这里教师在前缀“\(17\times23=\)”之后给“381”极低的概率，\(k_t\) 在这个 token 上很大，在前面的 token 上接近零，信号直接落在出错的位置。
 
 \textbf{教师同时充当奖励模型和 critic。}把整条回答的分数记为
 \begin{equation}

@@ -7,7 +7,7 @@
 
 \section{一个统一的比较表}
 
-六类模型的相对位置见图 \ref{fig:model-map}，各自的概率表达与代价见表 \ref{tab:model-families}。自回归模型逐变量生成，变分自编码器先抽取潜变量再解码，可逆流把简单分布连续变形，对抗生成模型通过判别反馈学习，扩散模型逐步去噪，能量模型通过能量高低规定相对概率。连续时间流所用的常微分方程（Ordinary Differential Equation，ODE）在后文推导。GAN 小节后还会讨论另一种只依靠两组样本训练生成器的方法：用核函数计算分布差异，而不训练判别器。
+六类模型的相对位置见图 \ref{fig:model-map}，各自的概率表达与代价见表 \ref{tab:model-families}。自回归模型逐变量生成，变分自编码器先抽取潜变量再解码，可逆流把简单分布连续变形，对抗生成模型通过判别反馈学习，扩散模型逐步去噪，能量模型（Energy-Based Model，EBM）通过能量高低规定相对概率。连续时间流所用的常微分方程（Ordinary Differential Equation，ODE）在后文推导。GAN 小节后还会讨论另一种只依靠两组样本训练生成器的方法：用核函数计算分布差异，而不训练判别器。
 
 \begin{figure}[H]
 \centering
@@ -67,7 +67,7 @@ Diffusion/\allowbreak Score & 噪声过程的反演 & 去噪、类别预测或 s
 \end{equation}
 
 \Needspace{8\baselineskip}
-一个直观的网络实现是 MADE（Masked Autoencoder for Distribution Estimation，掩码自编码密度估计器）~\cite{germain2015made}。它在前馈网络的连接上施加二值掩码，使第 \(t\) 个输出只能依赖 \(x_{<t}\)，不能读取 \(x_t\) 或后面的变量。以二值序列为例，网络输出 \(T\) 个参数，分别给出 \(p_\theta(x_t=1\mid x_{<t})\)；训练时一次前向就能计算所有位置的条件概率，生成时仍须按顺序采样并填入变量。MADE 展示了如何把链式分解落实为网络连接约束。第三章将重点讨论当前大语言模型的主流自回归实现：通过右移输入与因果注意力满足相同依赖约束的 decoder-only Transformer。
+一个直观的网络实现是 MADE（Masked Autoencoder for Distribution Estimation，掩码自编码密度估计器）~\cite{germain2015made}。它在前馈网络的连接上施加二值掩码，使第 \(t\) 个输出只能依赖 \(x_{<t}\)，不能读取 \(x_t\) 或后面的变量。以二值序列为例，网络输出 \(T\) 个参数，分别给出 \(p_\theta(x_t=1\mid x_{<t})\)；训练时一次前向就能计算所有位置的条件概率，生成时仍须按顺序采样并填入变量。MADE 展示了如何把链式分解落实为网络连接约束。第 \ref{chap:transformer} 章将重点讨论当前大语言模型的主流自回归实现：通过右移输入与因果注意力满足相同依赖约束的 decoder-only Transformer。
 
 \subsection{从经验分布到逐位置训练损失}
 
@@ -93,11 +93,11 @@ Diffusion/\allowbreak Score & 噪声过程的反演 & 去噪、类别预测或 s
  -\log p_\theta(x^{(i)})
  =-\sum_{t=1}^{T_i}\log p_\theta\!\left(x^{(i)}_t\mid x^{(i)}_{<t}\right).
 \end{equation}
-模型在每个真实前缀 \(x^{(i)}_{<t}\) 上输出整个词表 \(\mathcal V\) 上的 softmax 概率向量 \(\pi_{\theta,t}(\cdot\mid x^{(i)}_{<t})\)，训练标签只是其中真实下一个 token 的 one-hot 向量（真实类别处为 1，其余位置为 0） \(e_{x^{(i)}_t}\)。因此单个位置的 CE 为
+模型在每个真实前缀 \(x^{(i)}_{<t}\) 上输出整个词表 \(\mathcal V\) 上的 softmax 概率向量 \(p_\theta(\cdot\mid x^{(i)}_{<t})\)，训练标签只是其中真实下一个 token 的 one-hot 向量（真实类别处为 1，其余位置为 0） \(e_{x^{(i)}_t}\)。因此单个位置的 CE 为
 \begin{equation}
  \operatorname{CE}_{i,t}
  =-\sum_{v\in\mathcal V}e_{x^{(i)}_t}(v)
- \log \pi_{\theta,t}\!\left(v\mid x^{(i)}_{<t}\right)
+ \log p_\theta\!\left(v\mid x^{(i)}_{<t}\right)
  =-\log p_\theta\!\left(x^{(i)}_t\mid x^{(i)}_{<t}\right).
 \end{equation}
 把上一步与最初的 KL 表达式合起来看：每个位置只保留真实 token 那一项的 log 概率，对这些位置求和，恰好就是最小化 \(\KL(\hat\pi\Vert p_\theta)\) 时被丢掉常数项之后剩下的那一块。也就是说，训练时常用的 softmax 交叉熵损失，正是从最大似然目标逐项推出来的。下面比较训练时使用真实前缀与生成时使用模型前缀的计算差别。
@@ -123,7 +123,7 @@ x_1\sim p_\theta(\,\cdot\mid\langle\mathrm{BOS}\rangle),
 \begin{equation}
 x_2\sim p_\theta(\,\cdot\mid\langle\mathrm{BOS}\rangle,x_1),
 \end{equation}
-依此得到 \(x_3,x_4,\ldots\)，直到采到 EOS。每一步都可以直接按模型给出的条件分布抽取，也可以先修改这个分布（温度、截断、惩罚等）再抽取；具体做法和它们对分布的影响在第 \ref{sec:decoding} 章展开。采样必须等待前一个 token，因此训练的“并行计算所有位置”和生成的“串行推进前缀”是两个不同的计算过程。
+依此得到 \(x_3,x_4,\ldots\)，直到采到 EOS。每一步都可以直接按模型给出的条件分布抽取，也可以先修改这个分布（温度、截断、惩罚等）再抽取；具体做法和它们对分布的影响在第 \ref{sec:decoding} 节展开。采样必须等待前一个 token，因此训练的“并行计算所有位置”和生成的“串行推进前缀”是两个不同的计算过程（图 \ref{fig:autoregressive}）。
 
 两者的差异会造成 exposure bias：模型训练时总能看到真实前缀，部署时却会看到自己生成的前缀；一旦早期 token 出错，后续条件分布也随之改变。这个差异解释了为什么训练交叉熵很低时，仍需单独检验长序列采样稳定性。
 
@@ -149,7 +149,7 @@ VAE 先假定数据 \(x\) 是由一个低维潜变量 \(z\) 生成的；其核�
 
 \subsection{变分下界与重构目标}
 
-如果 decoder 是非线性神经网络，这个积分通常没有解析解，直接最大化 \(\log p_\theta(x)\) 也不能直接得到可反向传播的有限计算图。VAE 引入 encoder \(q_\phi(z\mid x)\) 作为真实后验 \(p_\theta(z\mid x)\) 的可计算近似。常见实现用一个共享的 encoder 主干和两个输出头产生 \(\mu_\phi(x)\) 与 \(\log\sigma_\phi^2(x)\)，定义 \(q_\phi(z\mid x)=\mathcal N\!\left(\mu_\phi(x),\operatorname{diag}\sigma_\phi^2(x)\right)\)。这个高斯分布描述的是给定 \(x\) 后潜变量 \(z\) 的近似后验；decoder 的观测分布 \(p_\theta(x\mid z)\) 则按数据类型选择。训练使用证据下界（Evidence Lower Bound，ELBO），“证据”指观测数据的边缘概率：
+如果 decoder 是非线性神经网络，这个积分通常没有解析解，最大化 \(\log p_\theta(x)\) 也就无法写成可反向传播的有限计算图。VAE 引入 encoder \(q_\phi(z\mid x)\) 作为真实后验 \(p_\theta(z\mid x)\) 的可计算近似。常见实现用一个共享的 encoder 主干和两个输出头产生 \(\mu_\phi(x)\) 与 \(\log\sigma_\phi^2(x)\)，定义 \(q_\phi(z\mid x)=\mathcal N\!\left(\mu_\phi(x),\operatorname{diag}\sigma_\phi^2(x)\right)\)。这个高斯分布描述的是给定 \(x\) 后潜变量 \(z\) 的近似后验；decoder 的观测分布 \(p_\theta(x\mid z)\) 则按数据类型选择。训练使用证据下界（Evidence Lower Bound，ELBO），“证据”指观测数据的边缘概率：
 \begin{equation}
 \begin{aligned}
  \mathcal L_{\mathrm{ELBO}}(x)
@@ -191,7 +191,7 @@ VAE 先假定数据 \(x\) 是由一个低维潜变量 \(z\) 生成的；其核�
 \end{aligned}
 \label{eq:vae-mc-loss}
 \end{equation}
-数据集的损失再对观测 \(x^{(i)}\) 取平均，实践中常取 \(K=1\)。这里每次都用同一个观测 \(x\) 评价 \(\log p_\theta(x\mid z^{(k)})\)，训练重构项时不需要从 decoder 再抽一个 \(x\)。若 \(q_\phi(z\mid x)\) 是对角高斯，KL 项可以精确计算：
+数据集的损失再对观测 \(x^{(i)}\) 取平均，实践中常取 \(K=1\)。这里每次都用同一个观测 \(x\) 评价 \(\log p_\theta(x\mid z^{(k)})\)。若 \(q_\phi(z\mid x)\) 是对角高斯，KL 项可以精确计算：
 \begin{equation}
  \KL\!\left(\mathcal N(\mu,\operatorname{diag}\sigma^2)\Vert\mathcal N(0,I)\right)
  =\frac12\sum_j\left(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1\right).
@@ -205,9 +205,9 @@ VAE 先假定数据 \(x\) 是由一个低维潜变量 \(z\) 生成的；其核�
 \label{fig:vae-network}
 \end{figure}
 
-\subsection{生成、重构与后验坍塌}
+\subsection{生成、重构与后验坍缩}
 
-VAE 的推理有两种含义。生成新样本时从 \(p(z)\) 采样，运行 decoder 得到 \(p_\theta(x\mid z)\) 的参数，再从中采样 \(x\)；分析已有 \(x\) 时运行 encoder 得到 \(q_\phi(z\mid x)\)，可从中采样 \(z\)，再查看 decoder 给出的观测分布。所谓“重构图”通常显示该分布的均值或概率；随机样本需另从该分布抽取。训练复杂度主要是一次 encoder、一次 decoder 和少量潜变量样本，通常不随数据维度做高维积分；建模困难则来自 ELBO 松弛、先验与真实聚合后验不匹配，以及强 decoder 可能不使用潜变量。当 \(q_\phi(z\mid x)\approx p(z)\) 且每个潜变量维度的 KL 接近零时，就出现 posterior collapse；这时观测似然可能仍然很好，但 \(z\) 已经不携带样本特有信息。可以在训练初期减弱 KL 惩罚、随后逐步恢复，让编码器先学会携带样本信息；也可以限制解码器能力，降低其绕过潜变量解释数据的倾向~\cite{bowman2016generating}。
+VAE 的推理有两种含义。生成新样本时从 \(p(z)\) 采样，运行 decoder 得到 \(p_\theta(x\mid z)\) 的参数，再从中采样 \(x\)；分析已有 \(x\) 时运行 encoder 得到 \(q_\phi(z\mid x)\)，可从中采样 \(z\)，再查看 decoder 给出的观测分布。训练复杂度主要是一次 encoder、一次 decoder 和少量潜变量样本，通常不随数据维度做高维积分；建模困难则来自 ELBO 松弛、先验与真实聚合后验不匹配，以及强 decoder 可能不使用潜变量。当 \(q_\phi(z\mid x)\approx p(z)\) 且每个潜变量维度的 KL 接近零时，就出现后验坍缩（posterior collapse）；这时观测似然可能仍然很好，但 \(z\) 已经不携带样本特有信息。可以在训练初期减弱 KL 惩罚、随后逐步恢复，让编码器先学会携带样本信息；也可以限制解码器能力，降低其绕过潜变量解释数据的倾向~\cite{bowman2016generating}。
 
 \begin{figure}[H]
 \centering
@@ -276,7 +276,7 @@ Normalizing Flow 是一串可逆、可微的变换~\cite{papamakarios2021normali
  x_b=\left(z_b-t_\theta(z_a)\right)\odot\exp[-s_\theta(z_a)].
 \end{equation}
 
-它能快速计算 Jacobian，是因为矩阵具有块三角结构：
+它能快速计算 Jacobian，是因为矩阵具有块三角结构（图 \ref{fig:realnvp-architecture}）：
 \begin{equation}
  \frac{\partial z}{\partial x}
  =
@@ -349,7 +349,7 @@ GAN 用生成器 \(G_\theta(z)\) 把简单噪声 \(z\sim p_Z\) 推送成样本�
  V(D^*,G)=-\log 4+
  2\,\operatorname{JSD}\!\left(p_{\mathrm{data}}\Vert p_g\right),
 \end{equation}
-JSD 是对称散度，其值在两个分布一致时为零。理想 Nash equilibrium 的含义是 \(p_g=p_{\mathrm{data}}\)，此时 \(D^*(x)=1/2\)，判别器无法从样本判断真假，生成器也没有方向继续改善；这个平衡在无限数据、无限模型容量和全局最优的设定下成立，有限网络的交替训练是它的近似。
+JSD 是对称散度，其值在两个分布一致时为零。理想纳什均衡（Nash equilibrium，任一方单独改变策略都无法改进自己目标的状态）的含义是 \(p_g=p_{\mathrm{data}}\)，此时 \(D^*(x)=1/2\)，判别器无法从样本判断真假，生成器也没有方向继续改善；这个平衡在无限数据、无限模型容量和全局最优的设定下成立，有限网络的交替训练是它的近似。
 
 实践中每一步先固定 \(G\) 更新判别器，再固定 \(D\) 更新生成器。原始生成器损失 \(\E_z\log[1-D(G(z))]\) 在判别器很强时容易梯度饱和：若生成样本很容易被识别，\(D(G(z))\approx0\)，判别器末端 sigmoid 已落在接近水平的区域，链式法则传回生成器的梯度因而接近零。这里的“饱和”指的是原始生成器目标在当前参数区间几乎不给出可用的改进方向。因此交替训练时常用 non-saturating loss
 \begin{equation}
@@ -365,7 +365,7 @@ JSD 是对称散度，其值在两个分布一致时为零。理想 Nash equilib
 \end{equation}
 此时分母接近 \(0\)，梯度被放大。也就是说，判别器越确信生成样本是假的，non-saturating 损失给出的更新方向反而越强，而原始 minimax 形式的生成器梯度则趋于消失。代价是 non-saturating 损失在生成器已经能骗过判别器时权重变小，学习信号随之减弱；两者的平衡点相同，梯度在训练不同阶段的有效性不同。
 
-GAN 的生成器需要对自己产生的样本求导：噪声 \(z\sim p_Z\) 与 \(\theta\) 无关，给定 \(z\) 后，梯度沿 \(z\to G_\theta(z)\to D_\phi(G_\theta(z))\) 回传。这是第 \ref{sec:gradient-estimator-map} 节的路径梯度；由于输入噪声已经固定分布，不需要再做 VAE 式的重参数化。GAN 不显式计算 \(p_g(x)\) 或 likelihood，推理时只需一次 \(G_\theta\) 前向传播，代价低；训练却是非凸的双层博弈，判别器过强、梯度不平衡和 mode collapse 会使生成器只覆盖少数容易骗过判别器的模式。图 \ref{fig:gan-architecture} 画出两步交替更新的数据流和梯度路径：判别器步只更新 \(\phi\)；生成器步固定 \(D_\phi\)，梯度穿过判别器和生成样本回到 \(G_\theta\)。
+GAN 的生成器需要对自己产生的样本求导：噪声 \(z\sim p_Z\) 与 \(\theta\) 无关，给定 \(z\) 后，梯度沿 \(z\to G_\theta(z)\to D_\phi(G_\theta(z))\) 回传。这是第 \ref{sec:gradient-estimator-map} 节的路径梯度；由于输入噪声已经固定分布，不需要再做 VAE 式的重参数化。GAN 不显式计算 \(p_g(x)\) 或 likelihood，推理时只需一次 \(G_\theta\) 前向传播，代价低；训练却是非凸的双层博弈，判别器过强、梯度不平衡和模式坍缩会使生成器只覆盖少数容易骗过判别器的模式。图 \ref{fig:gan-architecture} 画出两步交替更新的数据流和梯度路径：判别器步只更新 \(\phi\)；生成器步固定 \(D_\phi\)，梯度穿过判别器和生成样本回到 \(G_\theta\)。VAE、GAN 与 RealNVP 三者梯度路径的对照见图 \ref{fig:generative-network-comparison}。
 
 \begin{figure}[ht]
 \centering
@@ -377,11 +377,12 @@ GAN 的生成器需要对自己产生的样本求导：噪声 \(z\sim p_Z\) 与 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\textwidth]{vae_gan_realnvp_networks.pdf}
-\caption{VAE、GAN 和 RealNVP 的神经网络与梯度路径对照。VAE 面板的像素网格表示 decoder 输出的观测分布参数 \(\eta_\theta(z)\)，具体样本还需从该分布抽取；VAE 的随机性通过 \(\epsilon\) 进入可微重参数化。GAN 的生成器通过判别器损失获得梯度；RealNVP 通过耦合层的显式逆变换和三角 Jacobian 保持可逆。}
+\caption{VAE、GAN 和 RealNVP 的神经网络与梯度路径对照。VAE 面板的像素网格表示 decoder 输出的观测分布参数 \(\eta_\theta(z)\)；VAE 的随机性通过 \(\epsilon\) 进入可微重参数化。GAN 的生成器通过判别器损失获得梯度；RealNVP 通过耦合层的显式逆变换和三角 Jacobian 保持可逆。}
 \label{fig:generative-network-comparison}
 \end{figure}
 
 \subsection{核匹配与量子线路 Born machine}
+\label{sec:mmd-qcbm}
 
 GAN 说明，即使难以逐点计算 \(p_\theta(x)\)，只要能够从模型采样，仍可用真实样本和生成样本训练模型。另一条训练路径是直接比较两组样本的统计量。经典的生成矩匹配网络（Generative Moment Matching Network，GMMN）使用最大均值差异（Maximum Mean Discrepancy，MMD）作为生成损失~\cite{li2015gmmn,gretton2012kernel}。
 
@@ -408,7 +409,7 @@ GAN 说明，即使难以逐点计算 \(p_\theta(x)\)，只要能够从模型采
 
 有些任务很容易判断一个构型是否合理，却很难直接给出它的归一化概率。例如，物理哈密顿量能为每个构型计算能量，但平衡分布的配分函数需要遍历整个构型空间。能量模型沿用这一思路：先给样本打能量分数，再解决归一化与采样。
 
-EBM（Energy-Based Model，能量模型）用一个能量函数 \(E_\theta(x)\) 规定一条未归一化密度：
+能量模型用一个能量函数 \(E_\theta(x)\) 规定一条未归一化密度：
 \begin{equation}
  p_\theta(x)=Z_\theta^{-1}\exp[-E_\theta(x)],\qquad
  Z_\theta=\int\exp[-E_\theta(x)]\,dx.
@@ -429,7 +430,7 @@ EBM（Energy-Based Model，能量模型）用一个能量函数 \(E_\theta(x)\) 
  =\underbrace{\E_{p_{\mathrm{data}}}[\nabla_\theta E_\theta(x)]}_{\text{positive phase}}
  -\underbrace{\E_{p_\theta}[\nabla_\theta E_\theta(x)]}_{\text{negative phase}}.
 \end{equation}
-第一项只在真实数据上求值，实现简单，作用是降低数据点的能量；第二项要求在模型自身分布 \(p_\theta\) 上取期望，无法解析计算，只能采样。正负相位的名称来自统计物理中玻尔兹曼机的用法：负相位是把已建立的“模型样本能量”推高，使得模型不能靠把所有能量都压低来退化解。所以 EBM 的训练困难不在梯度公式，而在于每一步参数更新前都要先运行一次采样。
+第一项只在真实数据上求值，实现简单，作用是降低数据点的能量；第二项要求在模型自身分布 \(p_\theta\) 上取期望，无法解析计算，只能采样。正负相位的名称来自统计物理中玻尔兹曼机的用法：负相位是把已建立的“模型样本能量”推高，使得模型不能靠把所有能量都压低来退化解。所以 EBM 训练的主要代价是：每一步参数更新前都要先运行一次采样。
 
 第 \ref{sec:gradient-estimator-map} 节讨论了如何对参数化抽样目标求导；这里的模型期望已由 \(\nabla_\theta\log Z_\theta\) 的解析求导得到，MCMC 只负责取得负相位样本，不需要对马尔可夫链的抽样步骤求导。
 
@@ -441,13 +442,13 @@ Metropolis--Hastings（MH）从当前状态 \(x\) 按提议分布 \(q(x'\mid x)\
 \end{equation}
 这里 \(\tilde p_\theta(x)=\exp[-E_\theta(x)]\) 是未归一化密度。接受率只用到未归一化密度的比值，\(Z_\theta\) 在分子分母同时出现并约掉，这就是 MCMC 绕开配分函数的机制。可以验证该接受率满足细致平衡 \(\tilde p_\theta(x)q(x'\mid x)a(x'\mid x)=\tilde p_\theta(x')q(x\mid x')a(x\mid x')\)，对 \(x\) 积分即得 \(p_\theta\) 是平稳分布。
 
-Gibbs sampling 是 MH 的一个特例：当某个变量的条件分布在其余变量给定时可以精确采样时，直接从这个条件分布抽新值，接受率恒等于 \(1\)。它在 EBM 上能否使用取决于能量函数的结构。下面的受限玻尔兹曼机（RBM, Restricted Boltzmann Machine）就是一个条件分布可以精确计算的特例，它的例子把上面的正相位、负相位和持续链落成可执行步骤。
+Gibbs sampling 是 MH 的一个特例：当某个变量的条件分布在其余变量给定时可以精确采样时，直接从这个条件分布抽新值，接受率恒等于 \(1\)。它在 EBM 上能否使用取决于能量函数的结构。下面的受限玻尔兹曼机（Restricted Boltzmann Machine，RBM）就是一个条件分布可以精确计算的特例，它的例子把上面的正相位、负相位和持续链落成可执行步骤。
 
 Langevin dynamics 用能量梯度构造新的候选状态 \(x'\)，适用于 \(E_\theta\) 可微的连续变量。连续时间形式是
 \begin{equation}
  dx=-\tfrac12\nabla_x E_\theta(x)\,dt+dW_t,
 \end{equation}
-其中 \(W_t\) 是标准布朗运动，增量 \(dW_t\) 在时长 \(dt\) 内的协方差为 \(I\,dt\)。把它按步长 \(\eta\) 离散，就得到正文使用的迭代
+其中 \(W_t\) 是标准布朗运动，增量 \(dW_t\) 在时长 \(dt\) 内的协方差为 \(I\,dt\)。把它按步长 \(\eta\) 离散，就得到离散迭代
 \begin{equation}
  x_{k+1}=x_k-\frac{\eta}{2}\nabla_x E_\theta(x_k)+\sqrt{\eta}\,\xi_k,\qquad \xi_k\sim\mathcal N(0,I),
  \label{eq:langevin-step}
@@ -459,9 +460,9 @@ Langevin dynamics 用能量梯度构造新的候选状态 \(x'\)，适用于 \(E
 
 \textbf{负相位的两种近似。}精确估计负相位要求样本服从 \(p_\theta\)，而训练时每个 minibatch 都要重算一次负相位，等待链充分混合的代价过高。常见做法是接受一个有偏但便宜的估计。
 
-CD-\(k\)（Contrastive Divergence，\(k\) 步对比散度）从真实数据点出发，只跑 \(k\) 步 Gibbs 或 Langevin，用短链终点作为负样本，\(k\) 在实践中常取 \(1\)。它的更新量是“数据点的能量梯度减短链终点的能量梯度”。起点在数据附近使链不必先 burn-in，代价是终点尚未收敛到 \(p_\theta\)，因此所得更新带有短链偏差，主要探测数据附近模型赋予过高概率的区域，属于局部近似，不能保证覆盖所有模式。
+Contrastive Divergence（CD-\(k\)）从真实数据点出发，只跑 \(k\) 步 Gibbs 或 Langevin，用短链终点作为负样本，\(k\) 在实践中常取 \(1\)。它的更新量是“数据点的能量梯度减短链终点的能量梯度”。起点在数据附近使链不必先 burn-in，代价是终点尚未收敛到 \(p_\theta\)，因此所得更新带有短链偏差，主要探测数据附近模型赋予过高概率的区域，属于局部近似，不能保证覆盖所有模式。
 
-PCD（Persistent Contrastive Divergence，持续对比散度）把上一条链的终点保存下来，作为下一次参数更新时链的起点，从而不必每轮重新 burn-in。风险是参数在链还未平衡时已经改变，链追踪的是一个持续移动的分布；若能量面存在相距很远的模式，链可能长期停在其中一个模式，负样本的分布因此系统性偏离 \(p_\theta\)。实务中需要监控多链的能量、自相关时间和跨模式跃迁。
+Persistent Contrastive Divergence（PCD）把上一条链的终点保存下来，作为下一次参数更新时链的起点，从而不必每轮重新 burn-in。风险是参数在链还未平衡时已经改变，链追踪的是一个持续移动的分布；若能量面存在相距很远的模式，链可能长期停在其中一个模式，负样本的分布因此系统性偏离 \(p_\theta\)。实务中需要监控多链的能量、自相关时间和跨模式跃迁。
 
 \begin{examplebox}[RBM：一个能看见 Gibbs 更新细节的 EBM]
 RBM 把二值可见变量 \(v\) 和隐藏变量 \(h\) 的能量写成
@@ -516,9 +517,9 @@ E(v,h)=-a^\mathsf Tv-b^\mathsf Th-v^\mathsf TWh.
 
 EBM 把目标写成 \(p(x)\propto e^{-E(x)}\)，采样留给马尔可夫链。若这个未归一化目标已经由外部给出，还可以把“构造 \(x\)”的过程学成一个策略：训练完成后，从初始状态一路采样到终止状态，得到一个样本；样本出现的频率正比于 \(R(x)\)。这类模型叫生成流网络（Generative Flow Network，GFlowNet）~\cite{bengio2021gflownet}。
 
-这里的 \(R\) 是未归一化权重，目标分布是 \(p(x)=R(x)/Z\)。取 \(R(x)=e^{-\beta E(x)}\) 就得到玻尔兹曼分布，温度由 \(\beta\) 控制；取 \(R(x)=\exp(r(x)/\tau)\) 就得到第一章的 KL 倾斜解。后文沿用 GFlowNet 文献的“奖励”一词，但它在数学上始终是这条权重。
+这里的 \(R\) 是未归一化权重，目标分布是 \(p(x)=R(x)/Z\)。取 \(R(x)=e^{-\beta E(x)}\) 就得到玻尔兹曼分布，温度由 \(\beta\) 控制；取 \(R\) 为第 \ref{sec:post-training} 节式 \eqref{eq:kl-tilted-opt} 最优解的未归一化形式，目标分布就是那里的 KL 倾斜解。后文沿用 GFlowNet 文献的“奖励”一词，但它在数学上始终是这条权重。
 
-设状态图是一个有向无环图，从初始状态 \(s_0\) 出发，每步选择一个动作转移到下一个状态，终止状态就是样本 \(x\)。前向策略 \(P_F(s'\mid s)\) 决定怎样构造；反向策略 \(P_B(s\mid s')\) 只在训练时用来计算回流。一条完整轨迹 \(\tau=(s_0,\ldots,s_n=x)\) 的前向概率和反向概率分别是
+设状态图是一个有向无环图（Directed Acyclic Graph，DAG），从初始状态 \(s_0\) 出发，每步选择一个动作转移到下一个状态，终止状态就是样本 \(x\)。前向策略 \(P_F(s'\mid s)\) 决定怎样构造；反向策略 \(P_B(s\mid s')\) 只在训练时用来计算回流。一条完整轨迹 \(\tau=(s_0,\ldots,s_n=x)\) 的前向概率和反向概率分别是
 \begin{equation}
  P_F(\tau)=\prod_{t=0}^{n-1}P_F(s_{t+1}\mid s_t),\qquad
  P_B(\tau\mid x)=\prod_{t=1}^{n}P_B(s_{t-1}\mid s_t).
@@ -536,7 +537,7 @@ EBM 把目标写成 \(p(x)\propto e^{-E(x)}\)，采样留给马尔可夫链。�
 \begin{equation}
  R(00)=1,\quad R(01)=3,\quad R(10)=3,\quad R(11)=9,
 \end{equation}
-则 \(Z=16\)，目标分布是 \((1,3,3,9)/16\)。构造从 \(s_0\) 开始，第一步选第一位，第二步选第二位，选完即终止；状态图是一棵二叉树，四条从 \(s_0\) 到叶子的路径对应四个样本。
+则 \(Z=16\)，目标分布是 \((1,3,3,9)/16\)。构造从 \(s_0\) 开始，第一步选第一位，第二步选第二位，选完即终止；状态图是一棵二叉树（图 \ref{fig:gflownet-tree}），四条从 \(s_0\) 到叶子的路径对应四个样本。
 
 \begin{figure}[H]
 \centering
@@ -555,11 +556,11 @@ EBM 把目标写成 \(p(x)\propto e^{-E(x)}\)，采样留给马尔可夫链。�
   \draw[flow] (b1) -- node[above,font=\scriptsize]{0.2} (x10);
   \draw[flow,Orange,line width=1.1pt] (b1) -- node[below,font=\scriptsize]{0.8} (x11);
 \end{tikzpicture}
-\caption{两步构造的例子。每条从 \(s_0\) 到叶子的路径是一条轨迹；边上的数字是当前的 \(P_F\)。橙色路径 \(s_0\to1\to11\) 的前向概率是 \(0.5\times0.8=0.4\)，终点权重 \(R(11)=9\)。树里每个非根状态只有一个前驱，因此 \(P_B\equiv1\)。}
+\caption{两步构造的例子。每条从 \(s_0\) 到叶子的路径是一条轨迹，边上的数字是当前的 \(P_F\)，叶子标出 \(R\)。}
 \label{fig:gflownet-tree}
 \end{figure}
 
-图上边的数字是当前策略。取橙色轨迹 \(\tau=(s_0\to1\to11)\)，前向概率是 \(P_F(\tau)=0.5\times0.8=0.4\)，终点 \(x=11\)，\(R(x)=9\)。树里每个非根状态只有一个前驱，因此 \(P_B(1\mid11)=1\)、\(P_B(s_0\mid1)=1\)，\(P_B(\tau\mid x)=1\)。轨迹平衡要求
+图 \ref{fig:gflownet-tree} 边上的数字是当前策略。取橙色轨迹 \(\tau=(s_0\to1\to11)\)，前向概率是 \(P_F(\tau)=0.5\times0.8=0.4\)，终点 \(x=11\)，\(R(x)=9\)。树里每个非根状态只有一个前驱，因此 \(P_B(1\mid11)=1\)、\(P_B(s_0\mid1)=1\)，\(P_B(\tau\mid x)=1\)。轨迹平衡~\cite{malkin2022trajectory}要求
 \begin{equation}
  Z\,P_F(\tau)=R(x)\,P_B(\tau\mid x),
  \label{eq:gfn-tb}
@@ -599,13 +600,13 @@ EBM 把目标写成 \(p(x)\propto e^{-E(x)}\)，采样留给马尔可夫链。�
 \label{tab:gfn-train-sample}
 \end{table}
 
-整个过程不需要负样本，也不需要 \(R\) 对 \(x\) 的梯度；\(R\) 只在一个终止状态上被读出。
+训练和采样各自用到哪些量见表 \ref{tab:gfn-train-sample}。整个过程不需要负样本，也不需要 \(R\) 对 \(x\) 的梯度；\(R\) 只在一个终止状态上被读出。
 
 \(\log Z\) 是一个单独的可学习标量，每个状态图只有一个，和网络参数一起通过梯度下降更新；它不进入 \(P_F\) 或 \(P_B\) 的计算。训练收敛后它的值就是 \(\log\sum_xR(x)\)，这也是 GFlowNet 能顺带估计配分函数的原因。
 
 训练完成后，采样从 \(s_0\) 出发，每步按 \(P_F(\cdot\mid s)\) 抽一个动作，直到叶子。若训练后 \(P_F(1\mid s_0)=0.75\)、\(P_F(1\mid1)=0.75\)，采到 11 的概率就是 \(0.75\times0.75=0.5625=9/16\)，与目标一致；重复 \(N\) 次，各叶子出现的频率接近 \(R(x)/Z\)。采样时不需要计算 \(R\)，也没有马尔可夫链。条件生成把不合法动作的概率置零，或从固定前缀继续；\(\log Z\) 直接读训练好的标量。
 
-轨迹平衡的目标和最大似然、score matching 是同一类约束的不同写法。若数据分布恰好是 \(p(x)=R(x)/Z\)，那么最小化 \(\KL(p\Vert p_\theta)\) 的最优解就是 \(p_\theta=p\)；GFlowNet 不从这个 KL 出发，而是直接要求 \(P_F\) 诱导的边缘分布等于 \(R/Z\)，等价于要求所有轨迹上的流量守恒。这也是它和 score matching 的分工：score matching 学的是 \(\nabla_x\log p(x)\)，GFlowNet 学的是能产生 \(p(x)\) 的构造过程。
+轨迹平衡的目标和最大似然、score matching 是同一类约束的不同写法。若数据分布恰好是 \(p(x)=R(x)/Z\)，那么最小化 \(\KL(p\Vert p_\theta)\) 的最优解就是 \(p_\theta=p\)；GFlowNet 不从这个 KL 出发，而是直接要求 \(P_F\) 诱导的边缘分布等于 \(R/Z\)，等价于要求所有轨迹上的流量守恒。这也是它和 score matching 的分工：score matching 学的是 \(\nabla_x\log p(x)\)，GFlowNet 学的是能产生 \(p(x)\) 的构造过程。GFlowNet 与其他模型的异同见表 \ref{tab:gflownet-relations}。
 
 轨迹平衡用整条轨迹作约束，一条长轨迹上 \(\delta\) 的方差会随长度累积。另外两种写法缩短了约束的范围。detailed balance 只约束一条边 \((s,s')\)：记 \(F(s)=Z\,P_F(s)\) 为经过状态 \(s\) 的总流量，
 \begin{equation}
@@ -626,7 +627,7 @@ EBM 把目标写成 \(p(x)\propto e^{-E(x)}\)，采样留给马尔可夫链。�
 自回归 & 逐步构造，\(P_F\) 是逐位条件分布 & 自回归用最大似然拟合数据；GFlowNet 拟合给定的 \(R\)，状态图可以是集合、图或晶体\\
 EBM & 目标都是未归一化密度 & EBM 用 MCMC 采样；GFlowNet 把采样学成一个前向策略\\
 Flow Matching & 都在路径上匹配流量 & Flow Matching 的目标速度来自数据端点；GFlowNet 的目标流量来自终止状态的 \(R\)\\
-KL 倾斜解 & 目标都可写成 \(p\propto p_0e^{r/\tau}\) & GFlowNet 不需要 \(p_0\) 的归一化，直接按 \(R\) 构造\\
+KL 倾斜解（式 \eqref{eq:kl-tilted-opt}） & 目标都可写成 \(p\propto p_0e^{r/\tau}\) & GFlowNet 不需要 \(p_0\) 的归一化，直接按 \(R\) 构造\\
 策略梯度 & 都从策略采样 & 策略梯度最大化期望奖励；GFlowNet 让样本频率正比于 \(R\)\\
 \bottomrule
 \end{tabularx}
@@ -804,7 +805,7 @@ Diffusion model（扩散模型）把这个从噪声到图片的生成任务，�
 
 \subsection{为什么噪声回归能学到 score}
 
-下面回到连续变量。把加噪步长取到连续极限后，生成既可以写成反向随机微分方程，也可以写成与之具有相同时间边缘分布的概率流常微分方程，两者都在后文推导。无论哪一种，加噪过程都给定了漂移 \(f\) 与噪声强度 \(g\)，唯一未知的量是带噪数据分布的 score \(s_t=\nabla\log p_t\)。眼前已训练的是预测累计噪声的网络，因此关键问题是如何把噪声预测变成 \(s_t\)。下面的等价性给出这一步，使同一个网络能驱动连续时间的各类采样。
+下面回到连续变量。把加噪步长取到连续极限后，生成既可以写成反向的随机微分方程（Stochastic Differential Equation，SDE），也可以写成与之具有相同时间边缘分布的概率流常微分方程，两者都在后文推导。无论哪一种，加噪过程都给定了漂移 \(f\) 与噪声强度 \(g\)，唯一未知的量是带噪数据分布的 score \(s_t=\nabla\log p_t\)。眼前已训练的是预测累计噪声的网络，因此关键问题是如何把噪声预测变成 \(s_t\)。下面的等价性给出这一步，使同一个网络能驱动连续时间的各类采样。
 
 固定 \(t>0\) 后，记 \(q_t(x\mid x_0)\) 为前述条件分布 \(q(x_t\mid x_0)\) 在 \(x_t=x\) 处的密度。从总体数据随机抽 \(x_0\) 并按 \(q_t\) 加噪，所得 \(x_t\) 的密度是 \(p_t(x)=\int p_{\mathrm{data}}(x_0)q_t(x\mid x_0)\,dx_0\)。它把所有可能的干净图片混合在一起；我们关心的是这个\textbf{边缘分布}的 score \(s_t(x)=\nabla_x\log p_t(x)\)~\cite{song2020ncsn,song2021score}。从噪声预测到它，需要分清两个层次：给定某张原图时的高斯条件分布，以及不知道原图时的带噪总体分布。
 
@@ -873,7 +874,7 @@ Diffusion model（扩散模型）把这个从噪声到图片的生成任务，�
 
 \subsection{从随机扩散到概率流}
 
-为了统一描述加噪步长和采样器，先把离散时间细化到连续时间。随机微分方程（Stochastic Differential Equation，SDE）同时描述确定性漂移和布朗噪声：
+为了统一描述加噪步长和采样器，先把离散时间细化到连续时间。随机微分方程同时描述确定性漂移和布朗噪声：
 \begin{equation}
  dx=f(x,t)\,dt+g(t)\,dW_t.
  \label{eq:forward-sde}
@@ -968,9 +969,9 @@ Diffusion model（扩散模型）把这个从噪声到图片的生成任务，�
 
 多峰一行是两者最实质的差别。Langevin 要在固定的多峰分布里从一个峰走到另一个峰，必须穿过低密度区，等待时间随势垒高度指数增长。反向扩散从近似单峰的 \(p_T\) 出发，此时各峰尚未分开；随着噪声逐级降低，样本由输运项逐渐分配到不同的峰，各峰所得的样本比例由这条分布序列决定，而不靠样本自己越过势垒。
 
-这个拆分也把几种采样器放到同一张图里。只保留输运项，就是确定性的概率流 ODE 采样器；下一小节的 DDIM 可以看作它的一种离散化。只保留 Langevin 项，在每个噪声水平多走若干步、再逐级降低噪声，就是早期 score 模型使用的退火 Langevin 采样~\cite{song2020ncsn}。两项各走一步，就是 DDPM 的反向一步。Song 等人的预测--校正采样器把两部分显式分开：先用反向 SDE 或 ODE 的数值步预测下一噪声水平的样本，再在该水平上做若干步 Langevin 校正~\cite{song2021score}。校正步不改变目标边缘分布，可以减轻数值积分和 score 误差造成的偏离，代价是更多的网络调用。
+这个拆分也把几种采样器放到同一张图里。只保留输运项，就是确定性的概率流 ODE 采样器；下一小节的去噪扩散隐式模型（Denoising Diffusion Implicit Model，DDIM）可以看作它的一种离散化。只保留 Langevin 项，在每个噪声水平多走若干步、再逐级降低噪声，就是早期 score 模型使用的退火 Langevin 采样~\cite{song2020ncsn}。两项各走一步，就是 DDPM 的反向一步。Song 等人的预测--校正采样器把两部分显式分开：先用反向 SDE 或 ODE 的数值步预测下一噪声水平的样本，再在该水平上做若干步 Langevin 校正~\cite{song2021score}。校正步不改变目标边缘分布，可以减轻数值积分和 score 误差造成的偏离，代价是更多的网络调用。
 
-接下来讨论去噪扩散隐式模型（Denoising Diffusion Implicit Model，DDIM）怎样复用已训练的噪声网络做确定性跳步采样。
+接下来讨论 DDIM 怎样复用已训练的噪声网络做确定性跳步采样。
 
 \subsection{DDIM：复用噪声网络，改变采样步骤}
 
@@ -1002,7 +1003,7 @@ DDIM 沿用 DDPM 训练时的 \(q(x_t\mid x_0)\)、噪声损失和网络 \(\epsi
 \label{fig:diffusion-denoiser}
 \end{figure}
 
-当生成还受文本等条件 \(c\) 控制时，常用无分类器引导（classifier-free guidance）增强条件作用。训练时随机把一部分样本的条件替换为空条件，使同一网络既能输出 \(\epsilon_{\mathrm{cond}}=\epsilon_\theta(x_t,t,c)\)，也能输出 \(\epsilon_{\mathrm{uncond}}=\epsilon_\theta(x_t,t,\varnothing)\)。生成时各调用一次网络，将两次预测组合为
+当生成还受文本等条件 \(c\) 控制时，常用无分类器引导（classifier-free guidance）增强条件作用~\cite{ho2022classifierfree}。训练时随机把一部分样本的条件替换为空条件，使同一网络既能输出 \(\epsilon_{\mathrm{cond}}=\epsilon_\theta(x_t,t,c)\)，也能输出 \(\epsilon_{\mathrm{uncond}}=\epsilon_\theta(x_t,t,\varnothing)\)。生成时各调用一次网络，将两次预测组合为
 \begin{equation}
  \epsilon_{\mathrm{guide}}=\epsilon_{\mathrm{uncond}}+w(\epsilon_{\mathrm{cond}}-\epsilon_{\mathrm{uncond}}).
  \label{eq:cfg}
@@ -1098,7 +1099,9 @@ DDIM 沿用 DDPM 训练时的 \(q(x_t\mid x_0)\)、噪声损失和网络 \(\epsi
 \end{equation}
 其中 \(f(x,t)=-\beta(t)x/2\)、\(g(t)^2=\beta(t)\)，正是前面 DDPM 连续化得到的漂移和噪声强度。因此同一个一般公式既给出直线 Flow Matching 的最优速度，也给出扩散路径的式 \eqref{eq:probability-flow}。如果 Flow Matching 训练时也选用后一组 \(a(t),b(t)\)，它学到的就是这条扩散路径的概率流速度；本小节先前演示的直线路径则给出另一条速度场。扩散路径的公式按正向时间 \(t\) 表示数据到噪声的速度；生成时从 \(T\) 积分回 0，或改用 \(r=1-t/T\) 并把速度乘以 \(dt/dr=-T\)。这里得到的是确定性的概率流速度，DDPM 的随机反向高斯更新由式 \eqref{eq:ddpm-sampling-step} 给出。
 
-现在可以把第 \ref{sec:cnf} 节的 CNF 与本小节接起来：两者在生成时都从基分布沿 \(dx_r/dr=v_\theta(x_r,r)\) 积分，密度都遵循式 \eqref{eq:cnf-density}。CNF 指这种连续时间的可逆概率变换；Flow Matching 给出学习其速度场的一种监督方法。传统似然训练对每个数据样本求解 ODE 和散度积分，再优化 \(-\log p_1(x)\)；Flow Matching 则先指定具有解析采样公式的条件路径，随机取一个时间和一对端点，直接构造 \(x_r\) 与条件速度标签，按式 \eqref{eq:flow-matching} 回归，训练时不要求解生成 ODE。生成时仍按式 \eqref{eq:flow-matching-euler} 或更精确的求解器积分。若任务需要评价样本密度，也可对训练好的速度场反向积分并累积散度，由 CNF 公式得到 \(\log p_\theta(x)\) 的数值结果。
+现在可以把第 \ref{sec:cnf} 节的 CNF 与本小节接起来：两者在生成时都从基分布沿 \(dx_r/dr=v_\theta(x_r,r)\) 积分，密度都遵循式 \eqref{eq:cnf-density}。CNF 指这种连续时间的可逆概率变换；Flow Matching 给出学习其速度场的一种监督方法。传统似然训练对每个数据样本求解 ODE 和散度积分，再优化 \(-\log p_1(x)\)；Flow Matching 则先指定具有解析采样公式的条件路径，随机取一个时间和一对端点，直接构造 \(x_r\) 与条件速度标签，按式 \eqref{eq:flow-matching} 回归，训练时不要求解生成 ODE。生成时仍按式 \eqref{eq:flow-matching-euler} 或更精确的求解器积分。若任务需要评价样本密度，也可对训练好的速度场反向积分并累积散度，由 CNF 公式得到 \(\log p_\theta(x)\) 的数值结果。两种训练路径的对照见表 \ref{tab:cnf-flow-matching}。
+
+图 \ref{fig:diffusion-score} 汇总了本节训练与生成的几条路径，表 \ref{tab:diffusion-score-variants} 列出各方法相对 DDPM 改变的数学对象。
 
 \begin{table}[H]
 \centering\small
@@ -1140,7 +1143,7 @@ Flow Matching & 所选路径的速度回归 & 从基分布积分速度 ODE & 直
 
 \section{模型家族的选择原则}
 
-模型选择的差别可以直接落到任务约束上。下表按模型汇总四件事：它适合什么任务、训练时从哪里得到梯度、推理时沿哪条路径采样、以及代价落在哪里。
+模型选择的差别可以直接落到任务约束上。表 \ref{tab:model-selection-explicit} 按模型汇总四件事：它适合什么任务、训练时从哪里得到梯度、推理时沿哪条路径采样、以及代价落在哪里。
 
 \begin{table}[ht]
 \centering\scriptsize
@@ -1149,7 +1152,7 @@ Flow Matching & 所选路径的速度回归 & 从基分布积分速度 ODE & 直
 模型 & 适合的任务约束 & 训练目标与随机性 & 推理路径 & 代价与失效模式\\
 \midrule
 自回归 & 离散序列、逐步条件控制、需要 token likelihood
-& 真实序列 + causal mask，最小化 NLL；训练不需要从模型采样，softmax、注意力和 FFN 全部可微
+& 真实序列 + causal mask，最小化 NLL；训练不需要从模型采样，softmax、注意力和前馈网络全部可微
 & 从 BOS 逐 token ancestral sampling，每步读取历史缓存；输入可并行，生成串行
 & 串行延迟随输出长度增长；exposure bias；长上下文记忆成本高\\
 
@@ -1164,7 +1167,7 @@ Flow / RealNVP & 连续数据、需要精确 likelihood、可逆编码或重要�
 & 可逆结构限制表达；高维 patch、scale 稳定性和多层逆变换带来成本\\
 
 GAN & 单次前向延迟极低、允许隐式分布
-& 判别器 BCE 与生成器 minimax 或 non-saturating loss 交替；给定 \(z\)，生成器到判别器的路径可微
+& 判别器二元交叉熵与生成器 minimax 或 non-saturating loss 交替；给定 \(z\)，生成器到判别器的路径可微
 & \(z\) 一次过 \(G\)，部署吞吐高
 & 无 likelihood；博弈非凸、mode collapse、Nash 均衡难达到\\
 
@@ -1191,7 +1194,7 @@ EBM & 只知道能量、守恒量或未归一化目标密度
 
 \subsection{自回归 Transformer}
 
-给定 batch 中的真实序列 \(x_{1:T}\)，先把输入右移一位，形成 \(\langle\mathrm{BOS}\rangle,x_1,\ldots,x_{T-1}\)，经过 embedding、位置编码和 \(L\) 个 decoder block，得到每个位置的 logits \(l_t\)。对真实标签 \(x_t\) 计算
+给定 batch 中的真实序列 \(x_{1:T}\)，先把输入右移一位，形成 \(\langle\mathrm{BOS}\rangle,x_1,\ldots,x_{T-1}\)，经过嵌入、位置编码和 \(L\) 个 decoder block，得到每个位置的 logits \(l_t\)。对真实标签 \(x_t\) 计算
 \begin{equation}
 \mathcal L_{\mathrm{autoregressive}}=-\frac1T\sum_{t=1}^{T}
 \log\operatorname{softmax}(l_t)_{x_t}.
@@ -1209,7 +1212,7 @@ causal mask 使一次前向同时产生全部 \(T\) 个位置；反向传播更�
 \mathcal L_{\mathrm{Flow}}
 =-\log p_Z(z)-\sum_{\ell}\sum_j s_{\ell,j}(x_{a,\ell}).
 \end{equation}
-由于正向变换和 log-determinant 都是确定可微的，梯度直接更新每层产生 \(s,t\) 的网络；训练中没有从 \(z\) 采样。部署时从 \(z\sim p_Z\) 开始，按逆序计算 \(x_b=(z_b-t(z_a))e^{-s(z_a)}\)，无需迭代求解。若还要做 importance sampling，可用 exact \(p_X(x)\) 对样本重加权；这正是 Flow 相对 GAN/VAE 的概率优势。
+由于正向变换和 log-determinant 都是确定可微的，梯度直接更新每层产生 \(s,t\) 的网络；训练中没有从 \(z\) 采样。部署时从 \(z\sim p_Z\) 开始，按逆序计算 \(x_b=(z_b-t(z_a))e^{-s(z_a)}\)，无需迭代求解。若还要做重要性采样，即从 Flow 抽样后按目标密度与 \(p_X(x)\) 之比给每个样本加权，精确的 \(p_X(x)\) 正好用来计算这个权重；这正是 Flow 相对 GAN/VAE 的概率优势。
 
 \subsection{生成对抗网络}
 
@@ -1220,7 +1223,7 @@ causal mask 使一次前向同时产生全部 \(T\) 个位置；反向传播更�
 \mathcal L_D=-\E_x\log D_\phi(x)-\E_z\log(1-D_\phi(x_g)).
 \end{equation}
 随后冻结 \(D\)，重新取噪声或复用 \(x_g\)，最小化
-\(\mathcal L_G=-\E_z\log D_\phi(G_\theta(z))\)。判别器的梯度不能更新生成器，生成器的梯度必须通过 \(D(G(z))\) 回到 \(G\)；因此实现上要在两个 optimizer step 之间切换 requires-grad。推理时只保留 \(G\)，每个噪声一次前向得到一个样本；训练的不稳定来自两个网络的相对速度和分布支撑，与采样链无关。
+\(\mathcal L_G=-\E_z\log D_\phi(G_\theta(z))\)。判别器的梯度不能更新生成器，生成器的梯度必须通过 \(D(G(z))\) 回到 \(G\)。推理时只保留 \(G\)，每个噪声一次前向得到一个样本；训练的不稳定来自两个网络的相对速度和分布支撑，与采样链无关。
 
 \subsection{Diffusion / Score}
 
@@ -1228,7 +1231,7 @@ causal mask 使一次前向同时产生全部 \(T\) 个位置；反向传播更�
 \begin{equation}
 x_t=a_tx_0+b_t\epsilon,\qquad a_t=\sqrt{\bar\alpha_t},\quad b_t=\sqrt{1-\bar\alpha_t},
 \end{equation}
-构造网络输入，计算 \(\|\epsilon-\epsilon_\theta(x_t,t,c)\|^2\)，再标准反向传播。随机噪声不需要对 \(\epsilon\) 求梯度；它只是把同一个 \(x_0\) 变成不同噪声层级的训练实例。推理从 \(x_T\sim\mathcal N(0,I)\) 开始，重复调用同一 denoiser 并使用离散 reverse update、SDE solver 或 probability-flow ODE solver；一次样本需要 \(N_{\mathrm{step}}\) 次网络前向，因此采样成本与步数直接相乘。
+构造网络输入，计算 \(\|\epsilon-\epsilon_\theta(x_t,t,c)\|^2\)，再标准反向传播。随机噪声不需要对 \(\epsilon\) 求梯度；它只是把同一个 \(x_0\) 变成不同噪声层级的训练实例。推理从 \(x_T\sim\mathcal N(0,I)\) 开始，重复调用同一 denoiser 并使用离散反向更新、SDE 求解器或概率流 ODE 求解器；一次样本需要 \(N_{\mathrm{step}}\) 次网络前向，因此采样成本与步数直接相乘。
 
 \subsection{EBM}
 
@@ -1239,6 +1242,8 @@ x_t=a_tx_0+b_t\epsilon,\qquad a_t=\sqrt{\bar\alpha_t},\quad b_t=\sqrt{1-\bar\alp
 -\frac1B\sum_i\nabla_\theta E_\theta(x_i^{-}).
 \end{equation}
 短链得到的 \(x_i^{-}\) 与真实独立样本有偏差，所以参数更新和采样链互相影响。一个具体的 persistent chain 循环是：初始化并保存 \(M\) 个链状态；每个 minibatch 到来时，从这些旧状态各走 \(k\) 步 Gibbs、Metropolis--Hastings 或 Langevin 更新；用终点估计 negative phase；完成一次参数更新；最后把终点写回状态池，供下一 minibatch 继续。它省掉了每轮从随机初值重新 burn-in，却引入两类偏差：有限 \(k\) 使样本相关，参数在链尚未平衡时已经变化；若能量面有分离很远的模式，链还可能长期困在某一模式。实务中应监控多链能量、模式占比、自相关时间和跨模式跃迁，与训练 loss 一起看。推理阶段也运行同样的链，模型的表达和目标密度写法很灵活，代价集中在负相位和混合。
+
+表 \ref{tab:six-loops} 把六个训练循环放在一起对照。
 
 \begin{table}[H]
 \centering\small
