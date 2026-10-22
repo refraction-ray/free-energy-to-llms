@@ -469,7 +469,7 @@
     \end{column}
     \begin{column}{0.35\textwidth}
       \centering
-      \begin{tikzpicture}[x=1mm,y=1mm]
+      \begin{tikzpicture}[x=1mm,y=0.8mm]
         \fill[GTeal!70] (0,0) rectangle (10,30);
         \fill[GRose!70] (0,30) rectangle (10,40);
         \draw[GNavy,line width=0.8pt] (-2,40) -- (12,40);
@@ -479,7 +479,7 @@
       \end{tikzpicture}
       \vspace{1mm}
       \begin{concept}{变分推断}
-        间隙里有真实后验，含算不出的 $p_\theta(x)$，所以不算；但 $\log p_\theta(x)$ 与 $\phi$ 无关，抬高 ELBO 就是压小间隙。这正是第一讲的变分推断。
+        间隙含算不出的 $p_\theta(x)$，没法直接算。但固定 $\theta$ 时 $\log p_\theta(x)$ 是定值：ELBO 涨多少，间隙就缩多少。所以调 $\phi$ 抬高 ELBO，就是让 $q_\phi$ 逼近真实后验，即第一讲的变分推断。
       \end{concept}
     \end{column}
   \end{columns}
