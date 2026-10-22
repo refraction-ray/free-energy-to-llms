@@ -1,0 +1,16 @@
+% Preamble for this offering's decks.
+% Lookup order for \input and figures: this folder, then ../shared/ (theme and
+% slide-only figures), then ../../figures/ (the book's figures). `make slides`
+% sets TEXINPUTS accordingly; \input@path covers compiling directly in this folder.
+\makeatletter
+\def\input@path{{../shared/}}
+\makeatother
+\usepackage{beamerthemegenai}
+\graphicspath{{figures/}{../shared/figures/}{../../figures/}}
+
+\title{生成模型与概率统计}
+\author{张士欣}
+\institute{中国科学院物理研究所}
+\date{2026.10}
+\renewcommand{\titlefigure}{cover_probability_flow.pdf}
+\renewcommand*{\titleurl}{github.com/refraction-ray/free-energy-to-llms}

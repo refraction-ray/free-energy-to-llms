@@ -1,0 +1,203 @@
+% Beamer theme for the generative-model lectures.
+% Built on metropolis: white background, flat colours, no gradient bars.
+% Palette and colour semantics follow figures/figstyle.sty.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemegenai}[2026/10/14 Slides theme for gen-ai-arch]
+
+\usetheme[progressbar=frametitle,sectionpage=progressbar,numbering=none,titleformat=regular,block=fill]{metropolis}
+\usefonttheme{professionalfonts}
+
+\RequirePackage{amsmath,amssymb,mathtools,bm}
+\RequirePackage{booktabs,tabularx,array}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,shapes.geometric,shapes.misc,backgrounds,decorations.pathreplacing,decorations.markings,patterns}
+\RequirePackage{pgfplots}
+\usepgfplotslibrary{fillbetween}
+% metropolis loads its pgfplots theme at \begin{document} with compat=1.9.
+\AtBeginDocument{\pgfplotsset{compat=1.18}}
+\RequirePackage[most]{tcolorbox}
+
+% ---------------------------------------------------------------- fonts
+\setsansfont{FiraSans}[
+  Extension=.otf,
+  UprightFont=*-Light,
+  ItalicFont=*-LightItalic,
+  BoldFont=*-Medium,
+  BoldItalicFont=*-MediumItalic]
+\setmonofont{FiraMono}[Extension=.otf,UprightFont=*-Regular,BoldFont=*-Medium]
+\input{../../book/preamble/fonts.tex}
+
+% ---------------------------------------------------------------- palette
+\definecolor{GNavy}{HTML}{14324A}
+\definecolor{GTeal}{HTML}{0E7490}
+\definecolor{GSky}{HTML}{E7F5F8}
+\definecolor{GOrange}{HTML}{D97706}
+\definecolor{GAmber}{HTML}{FFF3D6}
+\definecolor{GInk}{HTML}{1F2937}
+\definecolor{GSlate}{HTML}{64748B}
+\definecolor{GMist}{HTML}{F5F7FA}
+\definecolor{GRose}{HTML}{9F1239}
+\definecolor{GRoseMist}{HTML}{FFF1F2}
+
+\setbeamercolor{normal text}{fg=GInk,bg=white}
+\setbeamercolor{alerted text}{fg=GOrange}
+\setbeamercolor{example text}{fg=GTeal}
+\setbeamercolor{structure}{fg=GNavy}
+\setbeamercolor{frametitle}{fg=GNavy,bg=white}
+\setbeamercolor{progress bar}{fg=GTeal,bg=GSky}
+\setbeamercolor{title separator}{fg=GTeal}
+\setbeamercolor{section title}{fg=GNavy}
+\setbeamercolor{footline}{fg=GSlate}
+\setbeamercolor{itemize item}{fg=GTeal}
+\setbeamercolor{itemize subitem}{fg=GSlate}
+\setbeamercolor{enumerate item}{fg=GTeal}
+\setbeamercolor{block title}{fg=GNavy,bg=GMist}
+\setbeamercolor{block body}{fg=GInk,bg=GMist!60}
+
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamerfont{footline}{size=\tiny}
+\setbeamertemplate{itemize item}{\raisebox{0.15ex}{\tiny$\blacksquare$}}
+\setbeamertemplate{itemize subitem}{\raisebox{0.2ex}{\tiny$\blacktriangleright$}}
+\setlength{\leftmargini}{1.4em}
+\setlength{\leftmarginii}{1.2em}
+
+% ---------------------------------------------------------------- footline
+% Lecture name on the left, frame number on the right.
+\newcommand{\lecturename}{}
+\setbeamertemplate{footline}{%
+  \ifnum\insertframenumber>1
+  \begin{beamercolorbox}[wd=\textwidth,ht=3.2ex,dp=1.6ex,leftskip=1.2em,rightskip=1.2em]{footline}%
+    \usebeamerfont{footline}\lecturename\hfill\insertframenumber
+  \end{beamercolorbox}%
+  \fi}
+
+% ---------------------------------------------------------------- title page
+\newcommand{\titlefigure}{}
+% Link shown under the date, without https://; set in common.tex.
+\newcommand*{\titleurl}{}
+\setbeamertemplate{title page}{%
+  \begin{minipage}[c][0.8\paperheight][t]{\textwidth}
+    \vspace*{9mm}
+    {\color{GNavy}\fontsize{24}{30}\selectfont\bfseries\inserttitle\par}
+    \vspace{3mm}
+    {\color{GSlate}\large\insertsubtitle\par}
+    \vspace{4mm}
+    {\color{GTeal}\rule{28mm}{1.2pt}\par}
+    \vspace{4mm}
+    {\color{GInk}\small\insertauthor\par}
+    \vspace{1mm}
+    {\color{GSlate}\footnotesize\insertinstitute\quad\insertdate\par}
+    \ifx\titleurl\empty\else
+      \vspace{3mm}
+      {\color{GTeal}\scriptsize\href{https://\titleurl}{\texttt{\titleurl}}\par}
+    \fi
+    \vfill
+    \ifx\titlefigure\empty\else
+      \hfill\includegraphics[width=0.6\textwidth]{\titlefigure}\par
+    \fi
+  \end{minipage}}
+
+% ---------------------------------------------------------------- boxes
+\tcbset{genaibox/.style={enhanced,breakable=false,sharp corners,boxrule=0pt,
+  left=2.2mm,right=2mm,top=1.2mm,bottom=1.2mm,fontupper=\small,halign=flush left}}
+
+% Probability concept a model step relies on; the label names the concept.
+\newtcolorbox{concept}[1]{genaibox,colback=GSky,colframe=GSky,
+  borderline west={2.2pt}{0pt}{GTeal},
+  before upper={{\color{GTeal}\bfseries #1}\quad}}
+
+% The derivation step shown on the slide.
+\newtcolorbox{keystep}[1][]{genaibox,colback=GAmber!55,colframe=GAmber!55,
+  borderline west={2.2pt}{0pt}{GOrange},
+  before upper={{\color{GOrange}\bfseries$\bigstar$\ \if\relax\detokenize{#1}\relax 关键一步\else #1\fi}\par\smallskip}}
+% Centred multi-line equation without the empty line a display adds at the
+% start of a box.
+\newcommand{\keyeq}[1]{\par{\centering$\displaystyle\begin{aligned}#1\end{aligned}$\par}}
+
+% Failure modes and hazards.
+\newtcolorbox{caution}[1][]{genaibox,colback=GRoseMist,colframe=GRoseMist,
+  borderline west={2.2pt}{0pt}{GRose},
+  before upper={{\color{GRose}\bfseries #1}\quad}}
+
+% Take-home message.
+\newtcolorbox{takeaway}[1][]{genaibox,colback=GMist,colframe=GMist,
+  borderline west={2.2pt}{0pt}{GNavy},
+  before upper={{\color{GNavy}\bfseries\if\relax\detokenize{#1}\relax 要点\else #1\fi}\par\smallskip}}
+
+% Step-by-step procedure (training loop, sampler).
+\newtcolorbox{procedure}[1]{genaibox,colback=white,colframe=GSlate!40,boxrule=0.4pt,
+  title={#1},coltitle=GNavy,colbacktitle=GMist,fonttitle=\small\bfseries,
+  toptitle=0.6mm,bottomtitle=0.6mm,titlerule=0pt}
+
+% 四格卡：probability object / objective / sampling / cost.
+\newcommand{\fourcard}[4]{%
+  \begin{tikzpicture}[x=1mm,y=1mm,font=\small]
+    \def\w{62}\def\h{20}\def\g{2.5}
+    \foreach \i/\j/\lab/\col in {0/1/概率对象/GTeal,1/1/训练目标/GOrange,0/0/采样方式/GNavy,1/0/代价与失效/GRose}{%
+      \fill[GMist] (\i*\w+\i*\g,\j*\h+\j*\g) rectangle ++(\w,\h);
+      \fill[\col] (\i*\w+\i*\g,\j*\h+\j*\g) rectangle ++(0.8,\h);
+      \node[anchor=north west,text=\col,font=\footnotesize\bfseries] at (\i*\w+\i*\g+3,\j*\h+\j*\g+\h-2.5) {\lab};}
+    \node[anchor=north west,text width=56mm,align=left] at (3,2*\h+\g-8) {#1};
+    \node[anchor=north west,text width=56mm,align=left] at (\w+\g+3,2*\h+\g-8) {#2};
+    \node[anchor=north west,text width=56mm,align=left] at (3,\h-8) {#3};
+    \node[anchor=north west,text width=56mm,align=left] at (\w+\g+3,\h-8) {#4};
+  \end{tikzpicture}}
+
+% Narrow variant for a column: four stacked rows.
+\newcommand{\fourstack}[4]{%
+  \begin{tikzpicture}[x=1mm,y=1mm,font=\small]
+    \def\w{64}\def\h{11}\def\g{1.6}
+    \foreach \j/\lab/\col/\txt in {3/概率对象/GTeal/{#1},2/训练目标/GOrange/{#2},1/采样方式/GNavy/{#3},0/代价与失效/GRose/{#4}}{%
+      \fill[GMist] (0,\j*\h+\j*\g) rectangle ++(\w,\h);
+      \fill[\col] (0,\j*\h+\j*\g) rectangle ++(0.8,\h);
+      \node[anchor=west,text=\col,font=\footnotesize\bfseries] at (2.5,\j*\h+\j*\g+0.5*\h) {\lab};
+      \node[anchor=west,text width=44mm,align=left,font=\footnotesize] at (19,\j*\h+\j*\g+0.5*\h) {\txt};}
+  \end{tikzpicture}}
+
+% ---------------------------------------------------------------- tikz styles
+% Same names and roles as figures/figstyle.sty; pictures set their
+% own units (usually x=1mm,y=1mm).
+\colorlet{FNavy}{GNavy}\colorlet{FTeal}{GTeal}\colorlet{FSky}{GSky}
+\colorlet{FOrange}{GOrange}\colorlet{FAmber}{GAmber}\colorlet{FInk}{GInk}
+\colorlet{FSlate}{GSlate}\colorlet{FMist}{GMist}\colorlet{FRose}{GRose}
+\colorlet{FRoseMist}{GRoseMist}
+\tikzset{
+  nbase/.style={draw,rounded corners=1.2pt,align=center,inner sep=2.4pt,minimum height=7mm,text=GInk,font=\small},
+  nteal/.style={nbase,draw=GTeal,fill=GSky},
+  norange/.style={nbase,draw=GOrange,fill=GAmber},
+  nnavy/.style={nbase,draw=GNavy,fill=white},
+  nsoft/.style={nbase,draw=GSlate!55,fill=GMist},
+  nrose/.style={nbase,draw=GRose,fill=GRoseMist},
+  ghost/.style={draw=none,fill=none,align=center,inner sep=1pt},
+  ar/.style={-{Latex[length=1.7mm,width=1.35mm]},draw=GSlate,line width=0.75pt},
+  ard/.style={ar,dashed},
+  arteal/.style={ar,draw=GTeal},
+  arorange/.style={ar,draw=GOrange},
+  arrose/.style={ar,draw=GRose},
+  lbl/.style={font=\scriptsize,text=GSlate,align=center,inner sep=1pt},
+  lblt/.style={lbl,text=GTeal},
+  lblo/.style={lbl,text=GOrange},
+  lbln/.style={lbl,text=GNavy},
+  lblr/.style={lbl,text=GRose},
+  dotT/.style={circle,fill=GTeal,inner sep=0pt,minimum size=1.6mm},
+  dotO/.style={circle,fill=GOrange,inner sep=0pt,minimum size=1.6mm},
+  dotS/.style={circle,fill=GSlate!60,inner sep=0pt,minimum size=1.4mm},
+}
+\pgfplotsset{
+  genai/.style={axis lines=left,axis line style={GSlate!70},tick style={GSlate!70},
+    ticklabel style={font=\scriptsize,text=GSlate},label style={font=\small,text=GInk},
+    no markers,samples=181,every axis plot/.append style={line width=1.1pt},
+    legend style={draw=none,fill=none,font=\scriptsize},legend cell align=left},
+}
+
+% ---------------------------------------------------------------- macros
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\KL}{\mathrm{KL}}
+\newcommand{\softmax}{\operatorname{softmax}}
+\newcommand{\teal}[1]{\textcolor{GTeal}{#1}}
+\newcommand{\orange}[1]{\textcolor{GOrange}{#1}}
+\newcommand{\rose}[1]{\textcolor{GRose}{#1}}
+\newcommand{\slate}[1]{\textcolor{GSlate}{#1}}
+\newcommand{\navy}[1]{\textcolor{GNavy}{#1}}
+\newcommand{\readmore}[1]{\hfill{\scriptsize\color{GSlate}讲义 #1}}

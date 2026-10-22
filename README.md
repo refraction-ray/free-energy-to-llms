@@ -61,10 +61,11 @@ sudo apt install fonts-noto-cjk
 
 make            # 插图和全书 → figures/*.pdf, book/free-energy-to-llms.pdf
 make figures    # 只编译插图
+make slides     # 最新一次开课的幻灯片 → slides/<offering>/*.pdf
 make clean      # 删除中间文件目录 build/
 ```
 
-仓库结构：`book/` 是正文（`main.tex`、按章拆分的源文件、`references.bib`），`figures/` 是每幅插图的 standalone TikZ 源码、编译出的 PDF 和共用样式 `figstyle.sty`。
+仓库结构：`book/` 是正文（`main.tex`、按章拆分的源文件、`references.bib`），`figures/` 是每幅插图的 standalone TikZ 源码、编译出的 PDF 和共用样式 `figstyle.sty`，`slides/` 是配套的课堂幻灯片，每次开课一个目录，见 [`slides/README.md`](slides/README.md)。
 
 ## 作者
 
@@ -89,4 +90,4 @@ make clean      # 删除中间文件目录 build/
 
 ## 许可协议
 
-本书的文字、插图及其源码采用 [CC BY-NC-SA 4.0](LICENSE) 协议：可以在注明出处的前提下自由复制、修改和再分发，但不得用于商业目的，衍生作品须以相同协议发布。
+本书的文字、插图、配套幻灯片及其源码采用 [CC BY-NC-SA 4.0](LICENSE) 协议：可以在注明出处的前提下自由复制、修改和再分发，但不得用于商业目的，衍生作品须以相同协议发布。

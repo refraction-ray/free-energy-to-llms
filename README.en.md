@@ -61,10 +61,11 @@ sudo apt install fonts-noto-cjk
 
 make            # figures and book → figures/*.pdf, book/free-energy-to-llms.pdf
 make figures    # figures only
+make slides     # slides of the latest offering → slides/<offering>/*.pdf
 make clean      # remove the intermediate build/ directory
 ```
 
-Layout: `book/` holds the text (`main.tex`, one source file per chapter, `references.bib`); `figures/` holds one standalone TikZ source per figure, its compiled PDF, and the shared style `figstyle.sty`.
+Layout: `book/` holds the text (`main.tex`, one source file per chapter, `references.bib`); `figures/` holds one standalone TikZ source per figure, its compiled PDF, and the shared style `figstyle.sty`; `slides/` holds the lecture slides that accompany the book (in Chinese), one folder per offering of the course, see [`slides/README.md`](slides/README.md).
 
 ## Author
 
@@ -89,4 +90,4 @@ Please report errors or suggestions in [Issues](https://github.com/refraction-ra
 
 ## License
 
-The text, figures and figure sources are licensed under [CC BY-NC-SA 4.0](LICENSE): you may copy, adapt and redistribute them with attribution, for non-commercial purposes only, and derivative works must carry the same license.
+The text, figures, lecture slides and their sources are licensed under [CC BY-NC-SA 4.0](LICENSE): you may copy, adapt and redistribute them with attribution, for non-commercial purposes only, and derivative works must carry the same license.

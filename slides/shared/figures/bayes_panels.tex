@@ -1,0 +1,69 @@
+% Prior x likelihood => posterior, three panels only (slide version of
+% latex/figures/bayes_conditioning.tex without the two-route strip).
+\begin{tikzpicture}[x=0.86mm,y=0.74mm,line cap=round,line join=round,
+    ptitle/.style={font=\small\bfseries,text=GNavy,align=center},
+    sub/.style={font=\scriptsize,text=GSlate,align=center,inner sep=1pt},
+    axis/.style={draw=GSlate!55,line width=0.6pt}]
+  \def\ridge{(0,22.5)(8,20.5)(14,18.3)(20,16.2)(26,14.2)(34,11.4)(42,9.2)(46,8.4)}
+  \def\cloud{(29.9,21.1)(27.0,23.3)(22.1,23.6)(16.3,21.9)(11.2,18.6)(8.2,14.6)%
+    (8.1,10.9)(11.0,8.7)(15.9,8.4)(21.8,10.1)(26.8,13.4)(29.8,17.5)}
+  \def\pts{21.5/15.6,23.8/14.6,17.5/16.2,19.8/17.4,15.2/16.8,23.1/16.3,%
+    18.3/18.4,15.9/19.4,19.2/14.0,16.4/14.5,22.0/17.9,20.9/13.4,17.0/12.6,%
+    21.2/19.2,24.4/17.6,13.9/14.1,19.9/11.9,12.6/16.2,25.9/15.9,22.6/11.9,%
+    11.9/13.0,26.6/18.9}
+  \newcommand{\panelaxes}{%
+    \draw[axis] (0,0)--(46,0);
+    \draw[axis] (0,0)--(0,26);
+    \node[lbl,anchor=north east] at (46,-0.8) {$x_1$};
+    \node[lbl,anchor=west] at (0.8,24) {$x_2$};}
+  % ---------------------------------------------------------------- titles
+  \node[ptitle,anchor=south] at (25,33) {\teal{先验} \teal{$p_\theta(x)$}};
+  \node[sub,anchor=south] at (25,28.5) {生成模型：哪些设计像真的};
+  \node[ptitle,anchor=south] at (82,33) {\orange{似然} \orange{$p_\phi(y^\star\mid x)$}};
+  \node[sub,anchor=south] at (82,28.5) {性质预测器：哪些设计达到目标};
+  \node[ptitle,anchor=south] at (139,33) {后验 $p(x\mid y^\star)$};
+  \node[sub,anchor=south] at (139,28.5) {两个条件同时满足};
+  % ---------------------------------------------------------------- prior
+  \begin{scope}[shift={(2,0)}]
+    \panelaxes
+    \draw[draw=GTeal!45,fill=GSky,smooth] plot coordinates {\cloud} -- cycle;
+    \foreach \x/\y in \pts {\fill[GTeal] (\x,\y) circle (0.95);}
+    \node[lblt,anchor=west] at (30,6) {训练数据};
+  \end{scope}
+  \node[font=\large,text=GSlate] at (53.5,13) {$\times$};
+  % ---------------------------------------------------------------- likelihood
+  \begin{scope}[shift={(59,0)}]
+    \fill[GAmber,opacity=0.5] (0,0) rectangle (46,26);
+    \panelaxes
+    \begin{scope}
+      \clip (0,0) rectangle (46,26);
+      \draw[GOrange,line width=9pt,opacity=0.12,smooth] plot coordinates {\ridge};
+      \draw[GOrange,line width=4.5pt,opacity=0.28,smooth] plot coordinates {\ridge};
+      \draw[GOrange,line width=1.2pt,smooth] plot coordinates {\ridge};
+    \end{scope}
+    \draw[draw=GTeal!35,dashed,smooth] plot coordinates {\cloud} -- cycle;
+    \foreach \x/\y in \pts {\fill[GTeal!35] (\x,\y) circle (0.8);}
+    \draw[GRose,line width=1.1pt] (39.6,8.2)--(42.4,11.0) (39.6,11.0)--(42.4,8.2);
+    \node[lblr,anchor=south] at (39,12.5) {只看似然};
+  \end{scope}
+  \node[font=\large,text=GSlate] at (110.5,13) {$\Rightarrow$};
+  % ---------------------------------------------------------------- posterior
+  \begin{scope}[shift={(116,0)}]
+    \fill[GAmber,opacity=0.5] (0,0) rectangle (46,26);
+    \panelaxes
+    \begin{scope}
+      \clip (0,0) rectangle (46,26);
+      \draw[GOrange,line width=7pt,opacity=0.10,smooth] plot coordinates {\ridge};
+      \draw[GOrange,line width=1.0pt,opacity=0.55,smooth] plot coordinates {\ridge};
+    \end{scope}
+    \draw[draw=GTeal!35,dashed,smooth] plot coordinates {\cloud} -- cycle;
+    \foreach \x/\y in {16.4/14.5,22.0/17.9,20.9/13.4,17.0/12.6,21.2/19.2,24.4/17.6,%
+      13.9/14.1,19.9/11.9,12.6/16.2,25.9/15.9,22.6/11.9,11.9/13.0,26.6/18.9}
+      {\fill[GSlate!60,opacity=0.5] (\x,\y) circle (0.8);}
+    \foreach \x/\y in {15.2/16.8,23.1/16.3,18.3/18.4,15.9/19.4,19.2/14.0}
+      {\fill[GOrange!55,opacity=0.55] (\x,\y) circle (1.15);}
+    \foreach \x/\y in {21.5/15.6,23.8/14.6,17.5/16.2,19.8/17.4}
+      {\fill[white] (\x,\y) circle (1.9); \fill[GOrange] (\x,\y) circle (1.4);}
+    \node[lblo,anchor=west] at (30,20) {留下的候选};
+  \end{scope}
+\end{tikzpicture}

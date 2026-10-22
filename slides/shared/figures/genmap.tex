@@ -1,0 +1,20 @@
+% Map of six routes for handling p(x); used in all three lectures.
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \def\cw{40.2}\def\ch{24}\def\gx{3}\def\gy{4}
+  \def\mapcard#1#2#3#4#5#6{%
+    \node[draw=#6,fill=white,rounded corners=1.5pt,minimum width=\cw mm,minimum height=\ch mm,
+      anchor=north west,inner sep=0pt] (c) at (#1) {};
+    \node[anchor=north west,font=\small\bfseries,text=GNavy,text height=1.8ex,text depth=0.4ex] at ($(c.north west)+(2.5,-2)$) {#2};
+    \node[anchor=north,font=\footnotesize,text=GInk] at ($(c.north)+(0,-8)$) {#3};
+    \node[anchor=north,font=\scriptsize,text=GSlate,text width=37mm,align=center] at ($(c.north)+(0,-13.5)$) {#4};
+    \fill[GSky] ($(c.south west)+(0.4,0.4)$) rectangle ($(c.south east)+(-0.4,5.4)$);
+    \node[anchor=south,font=\scriptsize,text=GTeal] at ($(c.south)+(0,0.9)$) {#5};}
+  \node[anchor=east,font=\footnotesize\bfseries,text=GNavy,align=right] at (13,-0.5*\ch) {算出\\$p(x)$};
+  \node[anchor=east,font=\footnotesize\bfseries,text=GOrange,align=right] at (13,-1.5*\ch-\gy) {绕开\\归一化};
+  \mapcard{15,0}{分解\quad 自回归}{$p(x)=\prod_t p(x_t\mid x_{<t})$}{精确似然；逐个采样，串行}{链式法则}{GTeal}
+  \mapcard{15+\cw+\gx,0}{变换\quad Flow}{$x=f_\theta^{-1}(z),\ z\sim\mathcal N(0,I)$}{精确似然；可逆结构受限}{随机变量的变量替换}{GTeal}
+  \mapcard{15+2*\cw+2*\gx,0}{隐变量\quad VAE}{$p(x)=\int p(z)\,p_\theta(x\mid z)\,dz$}{只能优化下界}{边缘化、Jensen 不等式}{GTeal}
+  \mapcard{15,-\ch-\gy}{对抗\quad GAN}{$x=G_\theta(z)$}{不给密度，只比较样本}{两样本检验}{GOrange}
+  \mapcard{15+\cw+\gx,-\ch-\gy}{能量\quad EBM}{$p(x)\propto e^{-E_\theta(x)}$}{未归一化；靠马尔可夫链采样}{玻尔兹曼分布、MCMC}{GOrange}
+  \mapcard{15+2*\cw+2*\gx,-\ch-\gy}{去噪\quad 扩散}{$s_\theta(x,t)\approx\nabla_x\log p_t(x)$}{学习各噪声水平的 score}{高斯卷积、条件期望、SDE}{GOrange}
+\end{tikzpicture}
