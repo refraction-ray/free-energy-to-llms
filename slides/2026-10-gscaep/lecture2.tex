@@ -17,7 +17,7 @@
       \begin{itemize}
         \item 训练目标：极大似然 $=$ 最小化 $\KL(\hat\pi\Vert p_\theta)$，需要能逐点计算 $\log p_\theta(x)$
         \item 从能量出发：最小化 $\KL(q\Vert\pi)$，即变分自由能
-        \item 难点：高维分布的归一化常数 $Z$；不知道 $Z$，既算不出密度，也不能直接抽样
+        \item 难点：高维分布的归一化常数 $Z$；不知道 $Z$，算不出密度，也没法直接抽出独立样本，只能靠 MCMC 慢慢混合
       \end{itemize}
       \vspace{2mm}
       本讲沿地图依次看五类模型怎样处理 $p(x)$，每一类都回答同样四个问题。
@@ -60,6 +60,7 @@
       \centering
       \begin{tikzpicture}[x=1mm,y=1mm]
         \node[nsoft] (r) at (0,20) {BOS};
+        \node[lbl,anchor=north] at (0,15.5) {序列开始};
         \node[nteal] (a) at (20,34) {猫};
         \node[nsoft] (b) at (20,20) {狗};
         \node[nsoft] (c) at (20,6) {鸟};
@@ -151,6 +152,56 @@
   \end{columns}
 \end{frame}
 
+\begin{frame}{想一想：每一步都选最可能的 token}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      同一个问题问两遍，大语言模型的回答不一样：每个 token 都是从 $p_\tau$ 中抽出来的。
+      \vspace{3mm}
+
+      不想要这种随机性，可以取 $\tau\to0$：每一步都只选概率最高的 token。
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{hook}
+        这样生成的回答，是不是最好的回答？
+        \par\medskip
+        \opt{A}{是：每一步都是最可能的}
+        \opt{B}{不是：会出什么问题？}
+      \end{hook}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{最可能的，并不典型}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{answer}
+        不是。每步都取最可能的 token，文本容易平淡，还会反复绕圈：“我不知道。我不知道。我不知道。……”人写的句子，在模型下的概率也远不是最高的（Holtzman 等，2020）。
+      \end{answer}
+      \vspace{2mm}
+      \begin{concept}{典型集}
+        高维分布里，单个最可能的点并不典型：典型样本数量极多，每一个的概率都不高。物理里也一样，300 K 的一杯水不处在基态。
+      \end{concept}
+      \vspace{1mm}
+      {\small 实际解码常用略低于 1 的温度，再加 top-$p$ 截断：既不离谱，也不呆板。}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[genai,width=7cm,height=4.8cm,xmin=0,xmax=13,ymin=0,ymax=1.08,ytick=\empty,xtick={0,3,10},xticklabels={原点,$\sqrt{10}$,$\sqrt{100}$},xlabel={到原点的距离 $\|x\|$},domain=0.02:13,samples=241]
+          \addplot[GSlate,dashed] {exp(-x^2/2)};
+          \addplot[GTeal] {exp(9*ln(x)-x^2/2-5.9506)};
+          \addplot[GOrange] {exp(99*ln(x)-x^2/2-178.53)};
+          \node[lbl,anchor=west,align=left] at (axis cs:1.2,0.92) {密度 $p(x)$：原点最高};
+          \node[lblt,anchor=south] at (axis cs:3,0.6) {$d=10$};
+          \node[lblo,anchor=south] at (axis cs:9.95,0.6) {$d=100$};
+        \end{axis}
+      \end{tikzpicture}
+      \par\vspace{1mm}
+      {\scriptsize\slate{$d$ 维标准高斯。灰虚线：密度沿任一方向的取值（未归一化），原点最高。彩色：样本到原点距离的分布，几乎都落在 $\sqrt d$ 附近。半径 $r$ 处的“体积”按 $r^{d-1}$ 增长，压过了密度的下降。每步都取最可能的 token，就是在往“原点”挤}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 \begin{frame}{自回归：小结}
   \centering
   \fourcard%
@@ -165,7 +216,7 @@
 \end{frame}
 
 % ====================================================================
-\section{Normalizing Flow：可逆变换}
+\section{Normalizing Flow（标准化流）：可逆变换}
 
 \begin{frame}{变量替换：概率质量守恒}
   \begin{columns}[c]
@@ -250,7 +301,7 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{连续极限：沿速度场搬运概率}
+\begin{frame}{连续极限：连续归一化流（CNF）沿速度场搬运概率}
   \begin{columns}[c]
     \begin{column}{0.5\textwidth}
       \centering
@@ -274,7 +325,7 @@
       \]
       \begin{itemize}
         \item 速度网络可以自由设计，不再需要特殊结构
-        \item 代价：极大似然训练时，每个样本都要解一次 ODE、沿轨迹积分散度，再让梯度穿过整个求解过程
+        \item 代价：极大似然训练时，每个样本都要解一次常微分方程（ODE）、沿轨迹积分散度，再让梯度穿过整个求解过程
       \end{itemize}
       \begin{concept}{连续性方程}
         $\partial_rp_r+\nabla\cdot(p_rv)=0$：概率像流体一样被搬运，总量守恒。第三讲的 Flow Matching 保留这个模型，换掉的是训练方式。
@@ -297,12 +348,79 @@
 \end{frame}
 
 % ====================================================================
-\section{VAE：隐变量与变分下界}
+\section{VAE（变分自编码器）：隐变量与变分下界}
+
+% A small face icon in a 14 mm tile: position, opacity.
+\newcommand{\vaeface}[2]{%
+  \begin{scope}[shift={#1}]
+    \fill[GMist] (0,0) rectangle (14,14);
+    \begin{scope}[opacity=#2]
+      \fill[GAmber] (7,7) circle (5.6);
+      \draw[GOrange,line width=0.6pt] (7,7) circle (5.6);
+      \fill[GNavy] (5,8.6) circle (0.7);
+      \fill[GNavy] (9,8.6) circle (0.7);
+      \draw[GNavy,line width=0.7pt] (4.6,5.4) .. controls (6,3.6) and (8,3.6) .. (9.4,5.4);
+    \end{scope}
+    \draw[GSlate!50] (0,0) rectangle (14,14);
+  \end{scope}}
+% Latent code: three cells, bottom-left corner.
+\newcommand{\vaecode}[1]{%
+  \begin{scope}[shift={#1}]
+    \foreach \k in {0,1,2}{\draw[GOrange,fill=GAmber] (0,\k*4) rectangle ++(4,4);}
+  \end{scope}}
+
+\begin{frame}{VAE 在做什么：压缩，再还原}
+  \centering
+  \begin{tikzpicture}[x=1mm,y=1mm]
+    \node[lbln,font=\footnotesize\bfseries,anchor=west] at (-24,23) {训练};
+    \vaeface{(0,16)}{1}
+    \node[lbl,anchor=north] at (7,15) {图像 $x$};
+    \draw[ar] (15,23) -- (19,23);
+    \draw[GTeal,fill=GSky] (20,15) -- (36,19) -- (36,27) -- (20,31) -- cycle;
+    \node[lblt] at (28,23) {encoder};
+    \node[lblt,anchor=north] at (28,14) {压缩};
+    \draw[ar] (37,23) -- (41,23);
+    \vaecode{(42,17)}
+    \node[lblo,anchor=south] at (44,30) {隐变量 $z$};
+    \node[lblo,anchor=north,align=center] at (44,15.5) {少数几个数};
+    \draw[ar] (47,23) -- (51,23);
+    \draw[GTeal,fill=GSky] (52,19) -- (68,15) -- (68,31) -- (52,27) -- cycle;
+    \node[lblt] at (60,23) {decoder};
+    \node[lblt,anchor=north] at (60,14) {还原};
+    \draw[ar] (69,23) -- (73,23);
+    \vaeface{(74,16)}{0.55}
+    \node[lbl,anchor=north] at (81,15) {还原 $\hat x$};
+    \draw[GSlate!40,dashed] (-24,9.5) -- (98,9.5);
+    \node[lbln,font=\footnotesize\bfseries,anchor=west] at (-24,-1) {生成};
+    \vaecode{(42,-7)}
+    \node[lblo,anchor=east] at (40,-1) {随机抽 $z\sim\mathcal N(0,I)$};
+    \draw[ar] (47,-1) -- (51,-1);
+    \draw[GTeal,fill=GSky] (52,-5) -- (68,-9) -- (68,7) -- (52,3) -- cycle;
+    \node[lblt] at (60,-1) {decoder};
+    \draw[ar] (69,-1) -- (73,-1);
+    \vaeface{(74,-8)}{1}
+    \node[lbl,anchor=west] at (89,-1) {新样本};
+  \end{tikzpicture}
+  \vfill
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      \textbf{要求 1}：还原出的 $\hat x$ 要像输入 $x$
+      \par\smallskip
+      \textbf{要求 2}：所有图像的 $z$ 都落在 $\mathcal N(0,I)$ 附近；否则生成时抽到的 $z$ 会落进 decoder 没见过的空洞
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{concept}{与普通自编码器的区别}
+        encoder 输出一个小高斯（均值与方差），而不是一个点；生成时只用 decoder。
+      \end{concept}
+    \end{column}
+  \end{columns}
+\end{frame}
 
 \begin{frame}{隐变量：观测背后的低维原因}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      人脸由姿态、光照、表情等少数因素决定。先抽因素，再生成观测：
+      人脸由姿态、光照、表情等少数因素决定。把上一页的“生成”写成概率：
       \[
         p_\theta(x)=\int p(z)\,p_\theta(x\mid z)\,dz,\quad p(z)=\mathcal N(0,I)
       \]
@@ -311,7 +429,7 @@
         \item 非线性 decoder 下积分没有解析解，后验 $p_\theta(z\mid x)$ 同样难算
       \end{itemize}
       \begin{concept}{边缘化与混合分布}
-        每个 $z$ 给出一个分量 $p_\theta(x\mid z)$，$p_\theta(x)$ 是所有分量按 $p(z)$ 加权的叠加。分量有无穷多个，$\log p_\theta(x)$ 无法逐点算出，下一页用 ELBO 绕开。
+        每个 $z$ 给出一个分量 $p_\theta(x\mid z)$，$p_\theta(x)$ 是所有分量按 $p(z)$ 加权的叠加。分量有无穷多个，$\log p_\theta(x)$ 无法逐点算出，下一页用证据下界（ELBO）绕开。
       \end{concept}
     \end{column}
     \begin{column}{0.47\textwidth}
@@ -329,7 +447,7 @@
         \node[lblo,anchor=west] at (34,25) {$p_\theta(x\mid z)$};
       \end{tikzpicture}
       \par\vspace{1mm}
-      {\scriptsize\slate{一个 $z$ 对应一个小高斯（虚线圈）；所有 $z$ 的小高斯叠在一起，就是浅蓝色的 $p_\theta(x)$}}
+      {\scriptsize\slate{左：从先验 $\mathcal N(0,I)$ 抽一个 $z$（橙点）。右：固定这个 $z$，decoder 在 $x$ 空间给出一个以 $\mu_\theta(z)$ 为中心的小高斯 $p_\theta(x\mid z)$（虚线圈）；所有 $z$ 的小高斯叠在一起，就是浅蓝色的 $p_\theta(x)$}}
     \end{column}
   \end{columns}
 \end{frame}
@@ -337,7 +455,7 @@
 \begin{frame}{ELBO：把难算的对数似然换成下界}
   \begin{columns}[T]
     \begin{column}{0.62\textwidth}
-      引入 encoder $q_\phi(z\mid x)$ 近似后验：
+      后验算不出来，就用 encoder $q_\phi(z\mid x)$ 去近似它；这就是架构图里负责压缩的那一半：
       \begin{keystep}
         \keyeq{
           \log p_\theta(x)&=\underbrace{\E_{q_\phi}\bigl[\log p_\theta(x\mid z)\bigr]-\KL\bigl(q_\phi(z\mid x)\Vert p(z)\bigr)}_{\mathrm{ELBO}}\\
@@ -345,8 +463,8 @@
         把贝叶斯公式 $p_\theta(z\mid x)=p_\theta(x,z)/p_\theta(x)$ 代入最后一项即可验证。
       \end{keystep}
       \begin{itemize}
-        \item 第一项：重构，已观测的 $x$ 在 decoder 分布下的对数概率
-        \item 第二项：编码分布不要偏离先验，否则从先验采样会落到没训练过的区域
+        \item 第一项就是要求 1（重构）：已观测的 $x$ 在 decoder 分布下的对数概率
+        \item 第二项就是要求 2：编码分布不要偏离先验，否则从先验采样会落到没训练过的区域
       \end{itemize}
     \end{column}
     \begin{column}{0.35\textwidth}
@@ -359,41 +477,19 @@
         \node[lblt,anchor=west] at (13,15) {ELBO};
         \node[lblr,anchor=west,text width=22mm,align=left] at (13,33) {后验 KL\\（间隙 $\geq0$）};
       \end{tikzpicture}
-      \vspace{2mm}
+      \vspace{1mm}
       \begin{concept}{变分推断}
-        优化 $\phi$ 让间隙缩小，优化 $\theta$ 抬高似然；这正是第一讲的变分推断。
+        间隙里有真实后验，含算不出的 $p_\theta(x)$，所以不算；但 $\log p_\theta(x)$ 与 $\phi$ 无关，抬高 ELBO 就是压小间隙。这正是第一讲的变分推断。
       \end{concept}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{怎样对“抽样”求梯度}
-  ELBO 里有 $\E_{z\sim q_\phi}[\cdot]$，而抽样分布本身含有待训练的 $\phi$。两条路径：
-  \vspace{2mm}
-
-  \small
-  \begin{tabularx}{\textwidth}{@{}>{\color{GNavy}\bfseries}l X X@{}}
-    \toprule
-    & 重参数化 & score-function\\
-    \midrule
-    写法 & $z=\mu_\phi+\sigma_\phi\odot\epsilon$，$\epsilon\sim\mathcal N(0,I)$ & $\nabla_\phi\E_{q_\phi}[h]=\E_{q_\phi}\bigl[h\,\nabla_\phi\log q_\phi(z)\bigr]$\\
-    梯度从哪里来 & 沿 $\epsilon\to z\to h$ 的计算图回传 & 用得分 $h$ 加权对数概率的梯度\\
-    要求 & 抽样可写成可微变换 & 只需 $\log q_\phi$ 可微；$z$ 可以离散\\
-    方差 & 通常较低 & 通常较高，常减去一个基线\\
-    用在哪里 & VAE、GAN &强化学习、大模型 RLHF（第三讲）\\
-    \bottomrule
-  \end{tabularx}
-  \vspace{3mm}
-  \begin{concept}{正态随机变量的标准化}
-    $z\sim\mathcal N(\mu,\sigma^2)$ 等价于 $z=\mu+\sigma\epsilon$。把随机性挪到与参数无关的 $\epsilon$ 上，$z$ 就对 $\mu,\sigma$ 可微。
-  \end{concept}
-\end{frame}
-
-\begin{frame}{VAE 的训练与生成}
+\begin{frame}{把数学放回网络：VAE 的训练与生成}
   \centering
   \includegraphics[width=0.95\textwidth]{vae_network.pdf}
   \vfill
-  {\small 对角高斯时 $\KL(q\Vert p)=\tfrac12\sum_j(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1)$ 有解析式；二值数据的重构项是逐位交叉熵，连续数据常用固定方差高斯，即 MSE。}
+  {\small 对角高斯时 $\KL(q\Vert p)=\tfrac12\sum_j(\mu_j^2+\sigma_j^2-\log\sigma_j^2-1)$ 有解析式；二值数据的重构项是逐位交叉熵，连续数据常用固定方差高斯，即 MSE。抽样一步写成 $z=\mu+\sigma\odot\epsilon$，梯度就能穿过它（见附录）。}
 \end{frame}
 
 \begin{frame}{重构与正则的拉锯}
@@ -437,7 +533,7 @@
 \end{frame}
 
 % ====================================================================
-\section{GAN：放弃似然}
+\section{GAN（生成对抗网络）：放弃似然}
 
 \begin{frame}{生成器与判别器}
   \centering
@@ -486,31 +582,54 @@
   \end{columns}
 \end{frame}
 
+\begin{frame}{想一想：裁判越强越好吗}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      生成器从头到尾没有见过一张真实图片。它学到的一切，都来自判别器传回的梯度
+      \[
+        \nabla_\theta\log\bigl(1-D(G_\theta(z))\bigr).
+      \]
+      判别器是它唯一的老师。
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{hook}
+        判别器越强，生成器学得越好吗？
+        \par\medskip
+        \opt{A}{越强越好}
+        \opt{B}{没有影响}
+        \opt{C}{太强了，生成器反而学不动}
+      \end{hook}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 \begin{frame}{GAN 的代价}
+  \begin{answer}
+    C。判别器太强时，对生成样本一律判“假”，$D(G(z))\approx0$，梯度几乎消失：生成器只知道“不行”，不知道往哪里改。两个网络必须势均力敌，而交替更新并不保证收敛。
+  \end{answer}
   \begin{columns}[T]
-    \begin{column}{0.55\textwidth}
+    \begin{column}{0.6\textwidth}
       \begin{itemize}
         \item 本讲唯一不以似然为目标的路线：没有密度，也报告不了样本的似然
-        \item 训练是两个网络的博弈，交替更新不保证收敛；判别器过强时生成器梯度消失
         \item Mode collapse：生成器只覆盖少数容易骗过判别器的模式，行为接近第一讲的反向 KL
         \item 部署时一次前向，速度最快
       \end{itemize}
-      \vspace{1mm}
-      {\small\slate{另一种只用样本的办法：固定核函数，最小化两组样本的最大均值差异（MMD），不需要判别器。}}
     \end{column}
-    \begin{column}{0.42\textwidth}
+    \begin{column}{0.37\textwidth}
       \centering
       \begin{tikzpicture}[x=1mm,y=1mm]
         \pgfmathsetseed{9}
         \foreach \a in {0,45,...,315}{%
-          \foreach \j in {1,...,7}{\fill[GTeal!70] ($(\a:15)+(1.6*rand,1.6*rand)$) circle (0.6);}}
+          \foreach \j in {1,...,7}{\fill[GTeal!70] ($(\a:10)+(1.2*rand,1.2*rand)$) circle (0.55);}}
         \foreach \a in {45,90}{%
-          \foreach \j in {1,...,9}{\fill[GOrange] ($(\a:15)+(1.2*rand,1.2*rand)$) circle (0.6);}}
-        \node[lblt,anchor=north] at (0,-19) {数据：8 个模式};
-        \node[lblo,anchor=north] at (0,-23) {生成器：只覆盖 2 个};
+          \foreach \j in {1,...,9}{\fill[GOrange] ($(\a:10)+(1*rand,1*rand)$) circle (0.55);}}
+        \node[lblt,anchor=west] at (14,2) {数据：8 个模式};
+        \node[lblo,anchor=west] at (14,-2) {生成器：只覆盖 2 个};
       \end{tikzpicture}
     \end{column}
   \end{columns}
+  \vspace{1.5mm}
+  {\small\slate{另一种只用样本的办法：固定核函数，最小化两组样本的最大均值差异（MMD），不需要判别器。}}
   \vfill
   \begin{takeaway}[小结]
     GAN 用一个可学习的检验统计量代替似然：采样最快、样本锐利，代价是无密度、训练不稳定、容易丢模式。
@@ -585,7 +704,7 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{马尔可夫链蒙特卡洛}
+\begin{frame}{马尔可夫链蒙特卡洛（MCMC）}
   \begin{columns}[T]
     \begin{column}{0.55\textwidth}
       构造一条马尔可夫链 $x_0\to x_1\to\cdots$，使目标 $\pi$ 是它的平稳分布；跑得足够久，状态就近似服从 $\pi$。
@@ -593,7 +712,7 @@
         若转移核满足 $\pi(x)K(x'\mid x)=\pi(x')K(x\mid x')$，对 $x$ 求和即得
         $\sum_x\pi(x)K(x'\mid x)=\pi(x')$，$\pi$ 是平稳分布。
       \end{keystep}
-      \textbf{Metropolis--Hastings}：从 $q(x'\mid x)$ 提议，以
+      \textbf{Metropolis--Hastings（MH）}：从 $q(x'\mid x)$ 提议，以
       \[
         a=\min\Bigl\{1,\ \frac{\tilde\pi(x')\,q(x\mid x')}{\tilde\pi(x)\,q(x'\mid x)}\Bigr\}
       \]
@@ -619,6 +738,34 @@
   \end{columns}
 \end{frame}
 
+\begin{frame}{想一想：降温之后}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \begin{tikzpicture}
+        \begin{axis}[genai,width=6.8cm,height=4.8cm,xmin=-1.8,xmax=1.8,ymin=0,ymax=11,xtick={-1,0,1},ytick=\empty,xlabel={$x$},ylabel={$E(x)$},domain=-1.8:1.8,samples=161,legend style={at={(0.5,1.02)},anchor=south,legend columns=2}]
+          \addplot[GOrange] {(x^2-1)^2/0.22};
+          \addlegendentry{$T=0.22$}
+          \addplot[GTeal,dashed] {(x^2-1)^2/0.11};
+          \addlegendentry{$T=0.11$}
+          \fill[GNavy] (axis cs:-1,0.35) circle (2pt);
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      双势阱 $E(x)=(x^2-1)^2/T$，从左谷出发跑一条 MCMC 链（下一页的 Langevin 动力学，步长 $\eta=0.01$）。$T=0.22$ 时，链平均约 5000 步跨到右谷一次。
+      \vspace{3mm}
+      \begin{hook}
+        温度降一半（$T=0.11$，势垒高一倍），平均要多少步？
+        \par\medskip
+        \opt{A}{约 1 万步}
+        \opt{B}{约 2 万步}
+        \opt{C}{远不止}
+      \end{hook}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 \begin{frame}{Langevin 动力学：沿梯度下坡，再加热噪声}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
@@ -637,13 +784,17 @@
     \end{column}
     \begin{column}{0.48\textwidth}
       \begin{tikzpicture}
-        \begin{axis}[genai,width=7.2cm,height=4.6cm,xmin=0,xmax=24,ymin=-1.9,ymax=1.9,xlabel={步数 $k$},ylabel={$x_k$},ytick={-1,0,1},xtick={0,10,20},xticklabels={0,1000,2000}]
+        \begin{axis}[genai,width=7.2cm,height=3.4cm,xmin=0,xmax=24,ymin=-1.9,ymax=1.9,xlabel={步数 $k$},ylabel={$x_k$},ytick={-1,0,1},xtick={0,10,20},xticklabels={0,1000,2000}]
           \draw[GSlate!40,dashed,line width=0.5pt] (axis cs:0,1) -- (axis cs:24,1);
           \draw[GSlate!40,dashed,line width=0.5pt] (axis cs:0,-1) -- (axis cs:24,-1);
           \addplot[GTeal,line width=0.6pt] table[x expr=\thisrow{k}/100,y=x] {../shared/figures/langevin_path.dat};
         \end{axis}
       \end{tikzpicture}
       \par{\scriptsize\slate{双势阱 $E=(x^2-1)^2/T$ 中的一条 Langevin 链：长时间停在一个谷里，偶尔跃迁}}
+      \vspace{2mm}
+      \begin{answer}
+        C。$\Delta E=1/T$ 从 4.5 升到 9.1，按 Arrhenius 定律 $\tau\propto e^{\Delta E}$，指数项放大约 90 倍；计入其他因子，实测约 21 万步，慢 40 多倍。对付势垒要升温、退火，第三讲再见。
+      \end{answer}
     \end{column}
   \end{columns}
 \end{frame}
@@ -653,7 +804,7 @@
     \begin{column}{0.5\textwidth}
       每次参数更新都要负相位样本，而充分混合的链太贵。常用有偏但便宜的近似：
       \begin{itemize}
-        \item \textbf{CD-$k$}：从数据点出发只跑 $k$ 步，用短链终点作负样本；只修正数据附近的错误
+        \item \textbf{CD-$k$}（对比散度）：从数据点出发只跑 $k$ 步，用短链终点作负样本；只修正数据附近的错误
         \item \textbf{持续链}：保存上一轮的链状态，下一轮接着跑；不必每次重新预热，但参数在变，链在追一个移动的目标
       \end{itemize}
       推理时同样要跑链：生成一个样本需要成百上千步。
@@ -664,7 +815,7 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Score：一个与 $Z$ 无关的量}
+\begin{frame}{Score（得分函数）：一个与 $Z$ 无关的量}
   \begin{columns}[c]
     \begin{column}{0.5\textwidth}
       \[
@@ -714,6 +865,31 @@
   \begin{takeaway}
     每一类模型都在“能否算出 $p(x)$”与“采样是否便宜”之间取舍。能量模型最灵活，却被采样拖累；score 绕开了 $Z$，但学到 score 之后怎样高效采样？如果在不同噪声水平上都学一个 score，会发生什么？这就是第三讲的扩散模型。
   \end{takeaway}
+\end{frame}
+
+\appendix
+\section{附录}
+
+\begin{frame}{附录：怎样对“抽样”求梯度}
+  ELBO 里有 $\E_{z\sim q_\phi}[\cdot]$，而抽样分布本身含有待训练的 $\phi$。两条路径：
+  \vspace{2mm}
+
+  \small
+  \begin{tabularx}{\textwidth}{@{}>{\color{GNavy}\bfseries}l X X@{}}
+    \toprule
+    & 重参数化 & score-function\\
+    \midrule
+    写法 & $z=\mu_\phi+\sigma_\phi\odot\epsilon$，$\epsilon\sim\mathcal N(0,I)$ & $\nabla_\phi\E_{q_\phi}[h]=\E_{q_\phi}\bigl[h\,\nabla_\phi\log q_\phi(z)\bigr]$\\
+    梯度从哪里来 & 沿 $\epsilon\to z\to h$ 的计算图回传 & 用得分 $h$ 加权对数概率的梯度\\
+    要求 & 抽样可写成可微变换 & 只需 $\log q_\phi$ 可微；$z$ 可以离散\\
+    方差 & 通常较低 & 通常较高，常减去一个基线\\
+    用在哪里 & VAE、GAN &强化学习、大模型 RLHF（第三讲）\\
+    \bottomrule
+  \end{tabularx}
+  \vspace{3mm}
+  \begin{concept}{正态随机变量的标准化}
+    $z\sim\mathcal N(\mu,\sigma^2)$ 等价于 $z=\mu+\sigma\epsilon$。把随机性挪到与参数无关的 $\epsilon$ 上，$z$ 就对 $\mu,\sigma$ 可微。
+  \end{concept}
 \end{frame}
 
 \end{document}

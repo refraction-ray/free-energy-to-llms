@@ -24,7 +24,7 @@
           \node[font=\scriptsize,text=GInk] at (\i*9+5.25,4.5) {\w};
           \node[font=\tiny,text=GSlate] at (\i*9+5.25,\p*55+10) {\p};}
         \draw[GSlate!60] (0,8) -- (56,8);
-        \node[lblt,anchor=west] at (0,0) {下一个 token 的条件分布 $p_\theta(x_t\mid x_{<t})$};
+        \node[lblt,anchor=west] at (0,0) {下一个 token（词元）的条件分布 $p_\theta(x_t\mid x_{<t})$};
       \end{tikzpicture}
       \par\vspace{1mm}
       {\small 抽一个 token，接到末尾，再算下一个分布}
@@ -100,7 +100,7 @@
   \begin{tabularx}{\textwidth}{@{}>{\color{GNavy}\bfseries}l >{\bfseries}l X@{}}
     \toprule
     第一讲 & 生成模型要解决什么问题 & 判别、生成与逆向设计；神经网络；怎样比较两个分布；玻尔兹曼分布与自由能；生成模型地图\\
-    第二讲 & 处理 $p(x)$ 的五种方式 & 自回归、Normalizing Flow、VAE、GAN、能量模型与 MCMC\\
+    第二讲 & 处理 $p(x)$ 的五种方式 & 自回归、Normalizing Flow（标准化流）、VAE（变分自编码器）、GAN（生成对抗网络）、能量模型与 MCMC\\
     第三讲 & 从去噪到大模型 & 扩散、score 与 Flow Matching；Transformer；大模型的训练阶段\\
     \bottomrule
   \end{tabularx}
@@ -139,8 +139,31 @@
   \end{tikzpicture}
   \vfill
   \begin{takeaway}
-    很少有模型能同时廉价地做好这两件事：GAN 采样快但给不出密度；能量模型的密度写法最灵活，采样却很慢；自回归模型两者兼有，代价是只能逐个生成。第二讲的各类模型就是在这里做不同的取舍。
+    很少有模型能同时廉价地做好这两件事：GAN（生成对抗网络）采样快但给不出密度；能量模型的密度写法最灵活，采样却很慢；自回归模型两者兼有，代价是只能逐个生成。第二讲的各类模型就是在这里做不同的取舍。
   \end{takeaway}
+\end{frame}
+
+\begin{frame}{想一想：直接优化预测器}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      训练好一个性质预测器 $f_\phi(x)$：输入材料结构 $x$，输出某项性能。它在测试集上误差很小。
+      \vspace{3mm}
+
+      逆向设计最直接的做法：从某个 $x$ 出发做梯度上升
+      \[
+        x\leftarrow x+\eta\,\nabla_xf_\phi(x),
+      \]
+      一直走到预测性能刷新纪录。
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{hook}
+        这样得到的 $x$，是一个好材料吗？
+        \par\medskip
+        \opt{A}{是：预测器在测试集上很准}
+        \opt{B}{不一定：那它会是什么？}
+      \end{hook}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 \begin{frame}{逆向设计：先验乘以似然}
@@ -163,9 +186,9 @@
   \centering
   \input{figures/bayes_panels.tex}
   \vfill
-  \begin{concept}{为什么要乘先验}
-    预测器 $p_\phi$ 只在训练数据附近可靠。只最大化似然，会找到数据之外、预测器误判的设计（中图 \rose{$\times$}）；乘上先验后，留下的候选既达到目标，又像真实数据。
-  \end{concept}
+  \begin{answer}
+    多半不是。预测器 $p_\phi$ 只在训练数据附近可靠，只最大化似然，会一路走到数据之外、预测器误判的地方（中图 \rose{$\times$}）。图像上有同样的现象：优化出来的条纹图案，被分类器以 99\% 以上的置信度认作“海星”（Nguyen 等，2015）。乘上先验后，留下的候选既达到目标，又像真实数据。
+  \end{answer}
 \end{frame}
 
 \begin{frame}{条件分布从哪里来：两条路线}
@@ -179,7 +202,7 @@
       \small
       分子对任意 $x$ 都能逐点算；分母 $p(y)$（记作 $Z_y$）要对所有 $x$ 积分，高维时算不出来。绕开分母：
       \begin{itemize}
-        \item \textbf{MCMC}：只用两个候选的后验之比，分母约掉
+        \item \textbf{马尔可夫链蒙特卡洛（MCMC）}：只用两个候选的后验之比，分母约掉
         \item \textbf{变分推断}：用可算的 $q$ 逼近后验，分母只贡献常数
       \end{itemize}
     \end{column}
@@ -261,7 +284,7 @@
       \end{tikzpicture}
     \end{column}
     \begin{column}{0.48\textwidth}
-      选一个带参数的函数 $f_\theta$，用数据决定参数：
+      选一个带参数的函数 $f_\theta$，用数据决定参数，最小化均方误差（MSE）：
       \[
         L(\theta)=\frac1N\sum_{i=1}^N\bigl(f_\theta(x_i)-y_i\bigr)^2
       \]
@@ -295,7 +318,7 @@
         \node[lbl,anchor=north] at (46,-1) {概率 $q_k=e^{z_k}/\sum_j e^{z_j}$};
       \end{tikzpicture}
       \par\vspace{3mm}
-      {\small 真实类别为“猫”：$\mathrm{CE}=-\log q_{\text{猫}}=-\log 0.786\approx0.24$}
+      {\small 真实类别为“猫”：交叉熵 $\mathrm{CE}=-\log q_{\text{猫}}=-\log 0.786\approx0.24$}
       \par\vspace{2mm}
       \begin{takeaway}
         网络输出的是一个分布的参数。VAE 的 decoder、语言模型的输出层都沿用这个思路。
@@ -437,7 +460,7 @@
   \begin{itemize}
     \item 一次反向传播得到对全部参数的梯度，代价只是前向计算的几倍，与参数个数无关
     \item 自动微分负责算梯度，优化器负责用梯度；两者是训练链中不同的步骤
-    \item 计算图中若有“从分布中抽样”这一步，梯度不能直接穿过，需要专门的估计方法（第二讲）
+    \item 计算图中若有“从分布中抽样”这一步，梯度不能直接穿过，需要专门的估计方法（第二讲附录）
   \end{itemize}
 \end{frame}
 
@@ -494,7 +517,7 @@
     \midrule
     $\KL(p_{\mathrm{data}}\Vert p_\theta)$ & 数据在模型下的平均对数似然 & 自回归、Flow；VAE 与扩散优化它的上界\\
     $\KL(q\Vert\pi)$ & 模型样本在目标下是否合理 & 变分推断、统计物理、RLHF\\
-    $\mathrm{JSD}(p\Vert q)$ & $\tfrac12\KL(p\Vert m)+\tfrac12\KL(q\Vert m)$，$m=\tfrac12(p+q)$：分类器能否分辨两组样本 & GAN\\
+    $\mathrm{JSD}(p\Vert q)$ & Jensen--Shannon 散度 $\tfrac12\KL(p\Vert m)+\tfrac12\KL(q\Vert m)$，$m=\tfrac12(p+q)$：分类器能否分辨两组样本 & GAN\\
     Fisher 散度 & $\tfrac12\E_p\|\nabla_x\log p-\nabla_x\log q\|^2$：两者的 score 是否处处一致 & score matching、扩散\\
     \bottomrule
   \end{tabularx}
@@ -504,7 +527,7 @@
   \end{takeaway}
 \end{frame}
 
-\begin{frame}{KL 散度}
+\begin{frame}{KL 散度（相对熵）}
   \begin{columns}[T]
     \begin{column}{0.52\textwidth}
       \[
@@ -542,8 +565,8 @@
   \end{keystep}
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      \begin{concept}{极大似然估计}
-        MLE 是在模型族里找离经验分布最近的分布；前面的 MSE 与交叉熵都是它的特例。
+      \begin{concept}{极大似然估计（MLE）}
+        在模型族里找离经验分布最近的分布；前面的 MSE 与交叉熵都是它的特例。
       \end{concept}
     \end{column}
     \begin{column}{0.47\textwidth}
@@ -554,6 +577,37 @@
         \item 能逐点计算 $\log p_\theta(x)$
       \end{itemize}
       第二条正是“显式密度”模型必须满足的要求。
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{想一想：一个高斯拟合两个峰}
+  \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+      \begin{tikzpicture}
+        \begin{axis}[genai,width=8.4cm,height=5.4cm,
+          xmin=-5,xmax=5,ymin=0,ymax=0.72,ytick=\empty,xtick=\empty,
+          xlabel={$x$},samples=241,domain=-5:5]
+          \addplot[fill=GSlate!18,draw=GSlate!70]
+            {0.5*exp(-(x+2)^2/(2*0.36))/(0.6*sqrt(2*pi))+0.5*exp(-(x-2)^2/(2*0.36))/(0.6*sqrt(2*pi))}
+            \closedcycle;
+          \addplot[GTeal]{exp(-x^2/(2*4.36))/(2.088*sqrt(2*pi))};
+          \addplot[GOrange,dashed]{exp(-(x-2)^2/(2*0.36))/(0.6*sqrt(2*pi))};
+          \node[font=\small\bfseries,text=GTeal] at (axis cs:0,0.25) {A};
+          \node[font=\small\bfseries,text=GOrange] at (axis cs:2.75,0.6) {B};
+          \node[font=\scriptsize,text=GSlate] at (axis cs:-2,0.43) {目标 $p$};
+        \end{axis}
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      目标 $p$ 有两个峰，模型 $q$ 却只能是一个高斯。
+      \vspace{3mm}
+      \begin{hook}
+        哪一个 $q$ 离 $p$ 更近？
+        \par\medskip
+        \opt{A}{横跨两峰的宽高斯}
+        \opt{B}{只盖住一个峰的窄高斯}
+      \end{hook}
     \end{column}
   \end{columns}
 \end{frame}
@@ -584,9 +638,9 @@
         \item \teal{前向 KL} 在 $p$ 下取期望：$p$ 有质量而 $q\approx0$ 处代价极大，$q$ 只好横跨两峰
         \item \orange{反向 KL} 在 $q$ 下取期望：$q$ 只需留在 $p$ 的高概率区，于是落在一个峰上
       \end{itemize}
-      \begin{takeaway}
-        前向 KL 覆盖所有模式，可能把概率放到模式之间；反向 KL 样本锐利，却可能丢掉模式。第二讲比较 VAE、GAN 时会再用到这张图。
-      \end{takeaway}
+      \begin{answer}
+        A、B 各是一个方向的最优解，“更近”取决于期望取在哪个分布下。A 覆盖所有模式，峰值却落在 $p$ 几乎没有概率的地方；B 的样本都像真的，却丢掉一个模式。第二讲比较 VAE、GAN 时会再用到这张图。
+      \end{answer}
     \end{column}
   \end{columns}
 \end{frame}
@@ -604,7 +658,7 @@
         \item $Z$：配分函数，对所有构型求和或积分
       \end{itemize}
       \vspace{1mm}
-      \begin{caution}[难点]采样和归一化都绕不开 $Z$。\end{caution}
+      \begin{caution}[难点]$Z$ 算不出来，密度只知道到一个常数因子；采样只能用 MCMC 这类只依赖概率比值的方法。\end{caution}
     \end{column}
     \begin{column}{0.5\textwidth}
       \begin{tikzpicture}
@@ -671,7 +725,7 @@
     \begin{column}{0.5\textwidth}
       \begin{itemize}
         \item 最小化反向 KL 等价于最小化变分自由能 $F[q]$，下界 $F$ 在 $q=\pi$ 时取到
-        \item 只需从 $q$ 采样并计算 $E$；不需要 $Z$，也不需要数据
+        \item 需要从 $q$ 采样，并能逐点算出 $E(x)$ 与 $\log q(x)$（熵项要用）；不需要 $Z$，也不需要数据
       \end{itemize}
     \end{column}
     \begin{column}{0.47\textwidth}
@@ -692,7 +746,7 @@
     手中有什么 & 目标 & 期望在谁下 & 典型问题\\
     \midrule
     数据样本 $\hat\pi$ & $\KL(\hat\pi\Vert p_\theta)$：极大似然 & 数据 & 生成模型训练（第二、三讲）\\
-    能量函数 $E(x)$ & $\KL(q\Vert\pi)$：变分自由能 & 模型 & 统计物理采样、变分推断、RLHF（第三讲）\\
+    能量函数 $E(x)$ & $\KL(q\Vert\pi)$：变分自由能 & 模型 & 统计物理采样、变分推断、RLHF（基于人类反馈的强化学习，第三讲）\\
     \bottomrule
   \end{tabularx}
 \end{frame}
@@ -707,7 +761,7 @@
         \item 任何写成 $p_\theta=\tilde p_\theta/Z_\theta$ 的模型
       \end{itemize}
       \vspace{2mm}
-      高维积分既难算，又让采样变难：不知道 $Z$，就不能直接按概率抽取构型。
+      高维积分难算，也让采样变难：不知道 $Z$，就没法像查分布表那样直接抽出独立样本，只能用 MCMC 这类只依赖概率比值的方法，代价是链要混合、样本彼此相关。
     \end{column}
     \begin{column}{0.53\textwidth}
       \small
@@ -733,7 +787,39 @@
 % ====================================================================
 \section{生成模型地图}
 
+\begin{frame}{想一想：随机涂像素}
+  \begin{columns}[c]
+    \begin{column}{0.42\textwidth}
+      \centering
+      \begin{tikzpicture}[x=1mm,y=1mm]
+        \pgfmathsetseed{7}
+        \foreach \i in {0,...,23}{\foreach \j in {0,...,23}{%
+          \pgfmathsetmacro{\r}{rnd}\pgfmathsetmacro{\g}{rnd}\pgfmathsetmacro{\b}{rnd}%
+          \definecolor{px}{rgb}{\r,\g,\b}%
+          \fill[px] (\i*2,\j*2) rectangle ++(2,2);}}
+        \draw[GSlate!60] (0,0) rectangle (48,48);
+        \node[lbl,anchor=north] at (24,-1.5) {随机抽出的一张“图”};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      一张 $256\times256$ 的彩色图，每个像素的 R、G、B 各从 $0$--$255$ 中随机取值。
+      \vspace{3mm}
+      \begin{hook}
+        平均要抽多少次，才能抽到一张看起来像照片的图？
+        \par\medskip
+        \opt{A}{约 $10^{10}$ 次}
+        \opt{B}{约 $10^{100}$ 次}
+        \opt{C}{宇宙寿命内也抽不到}
+      \end{hook}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 \begin{frame}{高维分布难在哪里}
+  \begin{answer}
+    C。可能的图共有 $256^{3\times256\times256}=256^{196608}\approx10^{473000}$ 张，而宇宙中的原子约 $10^{80}$ 个。真实照片只占其中极薄的一层（右图浅蓝带），随机抽样几乎永远落在它外面。
+  \end{answer}
+  \vspace{1mm}
   \begin{columns}[c]
     \begin{column}{0.5\textwidth}
       \begin{itemize}

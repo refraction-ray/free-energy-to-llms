@@ -124,6 +124,15 @@
   borderline west={2.2pt}{0pt}{GNavy},
   before upper={{\color{GNavy}\bfseries\if\relax\detokenize{#1}\relax 要点\else #1\fi}\par\smallskip}}
 
+% Question put to the audience; the next slide answers it in an answer box.
+\newtcolorbox{hook}[1][]{genaibox,colback=GNavy,colframe=GNavy,colupper=white,
+  fontupper=\normalsize,left=4mm,right=4mm,top=2.6mm,bottom=2.6mm,
+  before upper={{\color{GAmber}\bfseries\if\relax\detokenize{#1}\relax 问题\else #1\fi}\par\medskip}}
+% One answer option inside a hook box.
+\newcommand{\opt}[2]{{\color{GAmber}\bfseries #1}\enspace #2\par}
+\newtcolorbox{answer}[1][]{genaibox,colback=white,colframe=GOrange,boxrule=0.7pt,
+  before upper={{\color{GOrange}\bfseries\if\relax\detokenize{#1}\relax 回到问题\else #1\fi}\quad}}
+
 % Step-by-step procedure (training loop, sampler).
 \newtcolorbox{procedure}[1]{genaibox,colback=white,colframe=GSlate!40,boxrule=0.4pt,
   title={#1},coltitle=GNavy,colbacktitle=GMist,fonttitle=\small\bfseries,
